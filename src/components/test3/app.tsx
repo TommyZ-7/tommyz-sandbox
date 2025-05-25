@@ -28,7 +28,7 @@ export default function App() {
     async function initializeHandLandmarker() {
       try {
         const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm"
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
         );
         handLandmarkerRef.current = await HandLandmarker.createFromOptions(
           vision,
