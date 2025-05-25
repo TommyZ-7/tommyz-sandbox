@@ -1,5 +1,5 @@
 import Image from "next/image";
-import App from "@/components/test2/App";
+import App from "@/components/test2/app";
 
 export default function Home() {
   return (
