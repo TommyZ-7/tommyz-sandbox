@@ -1,6 +1,8 @@
 import {
   HandLandmarkerResult,
   HandLandmarker, // HAND_CONNECTIONS を取得するためにインポート
+  PoseLandmarker,
+  PoseLandmarkerResult,
   NormalizedLandmark,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
@@ -9,12 +11,12 @@ import {
  * Canvasに描画する
  * @param ctx Canvas 2D Context
  * @param videoElement 描画するビデオ要素
- * @param results 手の検出結果 (HandLandmarkerResult)
+ * @param results ポーズの検出結果 (PoseLandmarkerResult)
  */
 export const drawCanvas = (
   ctx: CanvasRenderingContext2D,
   videoElement: HTMLVideoElement,
-  results: HandLandmarkerResult
+  results: PoseLandmarkerResult
 ) => {
   const width = ctx.canvas.width;
   const height = ctx.canvas.height;
@@ -36,7 +38,7 @@ export const drawCanvas = (
       // 骨格の描画
       drawingUtils.drawConnectors(
         landmarks,
-        HandLandmarker.HAND_CONNECTIONS, // Task APIのHAND_CONNECTIONSを使用
+        PoseLandmarker.POSE_CONNECTIONS, // Task APIのHAND_CONNECTIONSを使用
         {
           color: "#00FF00", // 緑色
           lineWidth: 5,

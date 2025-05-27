@@ -1,93 +1,219 @@
 "use client";
-import { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import Webcam from "react-webcam";
+import { Camera } from "@mediapipe/camera_utils";
 import {
-  FilesetResolver,
+  HandLandmarker,
   PoseLandmarker,
+  PoseLandmarkerResult,
+  FilesetResolver,
+  HandLandmarkerResult,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
+import { drawCanvas } from "./util";
+
+// HandLandmarkerモデルへのパス
+const POSE_LANDMARKER_MODEL_PATH =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
 
 export default function App() {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const webcamRef = useRef<Webcam>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const poseLandmarkerRef = useRef<PoseLandmarker | null>(null);
+  const animationFrameIdRef = useRef<number | null>(null);
+  const lastVideoTimeRef = useRef<number>(-1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // HandLandmarkerの初期化
   useEffect(() => {
-    let landmarker: PoseLandmarker | undefined;
-    let stream: MediaStream | undefined;
+    async function initializeHandLandmarker() {
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
+        );
+        poseLandmarkerRef.current = await PoseLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath: POSE_LANDMARKER_MODEL_PATH,
+              delegate: "GPU",
+            },
+            runningMode: "VIDEO",
+            numPoses: 1,
+          }
+        );
+        setIsLoading(false);
+        console.log("HandLandmarker initialized successfully.");
+      } catch (error) {
+        console.error("Failed to initialize HandLandmarker:", error);
+        setErrorMessage(
+          `HandLandmarkerの初期化に失敗しました: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        setIsLoading(false);
+      }
+    }
+    initializeHandLandmarker();
 
-    // 初期化
-    const init = async () => {
-      // Wasm バンドルの読み込み
-      const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm"
-      );
-
-      // PoseLandmarker 初期化
-      landmarker = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath:
-            "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
-          delegate: "GPU", // GPU 利用。CPU しかない環境でも自動フォールバック
-        },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
-
-      // カメラ起動
-      stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (!videoRef.current) return;
-      videoRef.current.srcObject = stream;
-      await videoRef.current.play();
-
-      // 描画コンテキスト
-      const canvas = canvasRef.current!;
-      const ctx2d = canvas.getContext("2d")!;
-
-      // GPU 描画を完全に使い切る場合は WebGL2 コンテキストも取得する
-      // const gl = canvas.getContext("webgl2") as WebGL2RenderingContext;
-      // const drawer = new DrawingUtils(ctx2d, gl);
-      const drawer = new DrawingUtils(ctx2d);
-
-      // 推定ループ
-      const detect = () => {
-        if (!videoRef.current || !landmarker) return;
-
-        const ts = performance.now();
-        const res = landmarker.detectForVideo(videoRef.current, ts);
-
-        ctx2d.clearRect(0, 0, canvas.width, canvas.height);
-        ctx2d.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
-        if (res.landmarks.length) {
-          const lm = res.landmarks[0];
-          drawer.drawLandmarks(lm, {
-            color: "red",
-            lineWidth: 2,
-          });
-          drawer.drawConnectors(lm, PoseLandmarker.POSE_CONNECTIONS);
-        }
-        requestAnimationFrame(detect);
-      };
-      detect();
-    };
-
-    init();
-
-    // クリーンアップ
+    // クリーンアップ関数
     return () => {
-      landmarker?.close();
-      stream?.getTracks().forEach((t) => t.stop());
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+      if (poseLandmarkerRef.current) {
+        poseLandmarkerRef.current.close();
+      }
     };
   }, []);
 
+  // 描画ループ
+  const predictWebcam = useCallback(async () => {
+    if (
+      !poseLandmarkerRef.current ||
+      !webcamRef.current ||
+      !webcamRef.current.video ||
+      !canvasRef.current
+    ) {
+      animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    const video = webcamRef.current.video;
+    const canvas = canvasRef.current;
+    const canvasCtx = canvas.getContext("2d");
+
+    if (!canvasCtx) {
+      animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    // ビデオの準備ができているか確認
+    if (video.readyState < 2) {
+      // HAVE_CURRENT_DATA 以上が必要
+      animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+
+    // 前回のフレームと同じタイムスタンプの場合は処理をスキップ
+    if (video.currentTime === lastVideoTimeRef.current) {
+      animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+      return;
+    }
+    lastVideoTimeRef.current = video.currentTime;
+
+    try {
+      // PoseLandmarkerでポーズの検出を実行
+      const results: PoseLandmarkerResult =
+        poseLandmarkerRef.current.detectForVideo(video, performance.now());
+
+      // 描画処理
+      drawCanvas(canvasCtx, video, results);
+    } catch (error) {
+      console.error("Error during pose detection:", error);
+      setErrorMessage(
+        `ポーズの検出中にエラーが発生しました: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+
+    // 次のフレームをリクエスト
+    animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+  }, []);
+
+  // カメラの初期設定と描画ループの開始
+  useEffect(() => {
+    if (isLoading || errorMessage) return; // 初期化中またはエラー時は何もしない
+
+    if (webcamRef.current && webcamRef.current.video) {
+      const camera = new Camera(webcamRef.current.video, {
+        onFrame: async () => {
+          // onFrameは空でも良い。predictWebcamループで処理するため。
+          // 必要であれば、ここでwebcamRef.current.videoを直接使うこともできる。
+        },
+        width: 1280,
+        height: 720,
+      });
+      camera
+        .start()
+        .then(() => {
+          console.log("Camera started. Starting prediction loop.");
+          // 描画ループを開始
+          animationFrameIdRef.current = requestAnimationFrame(predictWebcam);
+        })
+        .catch((err) => {
+          console.error("Failed to start camera:", err);
+          setErrorMessage(
+            `カメラの起動に失敗しました: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        });
+
+      return () => {
+        // Cameraインスタンスのクリーンアップ (camera.stop()など、Cameraクラスの仕様による)
+        // Cameraユーティリティのstopメソッドがない場合は、関連するリソース解放処理をここで行う
+        if (camera && typeof (camera as any).stop === "function") {
+          (camera as any).stop();
+        }
+        if (animationFrameIdRef.current) {
+          cancelAnimationFrame(animationFrameIdRef.current);
+        }
+      };
+    }
+  }, [isLoading, errorMessage, predictWebcam]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        読み込み中...
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="flex items-center justify-center h-screen text-red-500">
+        {errorMessage}
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <video
-        ref={videoRef}
-        width={640}
-        height={480}
-        style={{ display: "none" }}
+    <div className="relative w-full max-w-4xl mx-auto">
+      <Webcam
+        audio={false}
+        className="absolute top-0 left-0 opacity-0" // 描画はCanvasで行うため非表示にするが、参照は保持
+        width={1280}
+        height={720}
+        ref={webcamRef}
+        screenshotFormat="image/jpeg"
+        videoConstraints={{ width: 1280, height: 720, facingMode: "user" }}
+        onUserMediaError={(error) => {
+          console.error("Webcam error:", error);
+          setErrorMessage(
+            typeof error === "object" &&
+              error !== null &&
+              "name" in error &&
+              "message" in error
+              ? `Webcamエラー: ${(error as DOMException).name} - ${
+                  (error as DOMException).message
+                }`
+              : `Webcamエラー: ${String(error)}`
+          );
+        }}
+        onUserMedia={() => console.log("Webcam access granted.")}
       />
-      <canvas ref={canvasRef} width={640} height={480} />
+      <canvas
+        ref={canvasRef}
+        width={1280}
+        height={720}
+        className="w-full h-auto border border-gray-300 rounded-lg shadow-lg"
+      />
+      {/* 検出結果をコンソールに出力するボタン（必要に応じて） */}
+      {/* <button onClick={OutputData} className="mt-4 p-2 bg-blue-500 text-white rounded">Output Data</button> */}
     </div>
   );
 }
