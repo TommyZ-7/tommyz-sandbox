@@ -21,6 +21,17 @@ export default function Home() {
             テスト3: mediapipeの新しいバージョンを使用したやつ
           </Link>
         </div>
+        <h1 className="text-3xl font-bold text-center sm:text-left">
+          体の検出アプリテスト
+        </h1>
+        <p className="text-lg text-gray-700 text-center sm:text-left">
+          体の検出を行うWebアプリケーションです。カメラを使用して体の動きをリアルタイムで検出します。
+        </p>
+        <div className="flex flex-col gap-4">
+          <Link href="/kennkyu/test4" className="text-blue-600 hover:underline">
+            テスト4:　初期バージョン
+          </Link>
+        </div>
       </main>
     </div>
   );
