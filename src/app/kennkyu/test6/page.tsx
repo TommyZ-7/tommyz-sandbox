@@ -7,11 +7,15 @@ import type * as poseDetection from "@tensorflow-models/pose-detection";
 import type * as tf from "@tensorflow/tfjs";
 
 // モデルタイプを型として定義
-type ModelType = "Lightning" | "Thunder";
+type ModelType = "Lightning" | "Thunder" | "multiPose";
+// 処理方法を型として定義
+type ProcessingMode = "CPU" | "GPU" | "WebGPU";
 
 const PoseDetector = (): JSX.Element => {
   // モデルの種類を管理するState
   const [modelType, setModelType] = useState<ModelType>("Lightning");
+  // 処理方法を管理するState
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>("GPU");
   // 読み込み中・エラーの状態を管理するState
   const [status, setStatus] = useState("Loading...");
 
@@ -32,6 +36,10 @@ const PoseDetector = (): JSX.Element => {
   const [isModelReady, setIsModelReady] = useState(false);
   // カメラの準備状態を管理するState
   const [isCameraReady, setIsCameraReady] = useState(false);
+  // GPU利用可能状態を管理するState
+  const [isGpuAvailable, setIsGpuAvailable] = useState(false);
+  // WebGPU利用可能状態を管理するState
+  const [isWebGpuAvailable, setIsWebGpuAvailable] = useState(false);
 
   /**
    * キーポイント（関節点）を描画する
@@ -136,8 +144,96 @@ const PoseDetector = (): JSX.Element => {
   }, [drawResults]);
 
   /**
+   * WebGPUの利用可能性をチェックする関数
+   */
+  const checkWebGpuAvailability = async (): Promise<boolean> => {
+    if (!navigator.gpu) {
+      console.log("WebGPU is not supported in this browser");
+      return false;
+    }
+
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        console.log("WebGPU adapter not available");
+        return false;
+      }
+      console.log("WebGPU is available");
+      return true;
+    } catch (error) {
+      console.error("Error checking WebGPU availability:", error);
+      return false;
+    }
+  };
+
+  /**
+   * TensorFlow.jsのバックエンドを設定する関数
+   */
+  const setupTensorFlowBackend = async (
+    tfModule: typeof tf,
+    mode: ProcessingMode
+  ) => {
+    try {
+      if (mode === "WebGPU") {
+        setLoadingProgress("WebGPU利用可能性をチェック中...");
+
+        const webGpuAvailable = await checkWebGpuAvailability();
+        setIsWebGpuAvailable(webGpuAvailable);
+
+        if (!webGpuAvailable) {
+          console.warn(
+            "WebGPUが利用できません。GPU（WebGL）モードにフォールバックします。"
+          );
+          setProcessingMode("GPU");
+          setLoadingProgress("GPU（WebGL）バックエンドを初期化中...");
+          await tfModule.setBackend("webgl");
+        } else {
+          setLoadingProgress("WebGPUバックエンドを初期化中...");
+          await tfModule.setBackend("webgpu");
+        }
+        await tfModule.ready();
+      } else if (mode === "GPU") {
+        setLoadingProgress("GPU（WebGL）バックエンドを初期化中...");
+
+        // WebGLバックエンドを設定
+        await tfModule.setBackend("webgl");
+        await tfModule.ready();
+
+        // GPU利用可能性をチェック
+        const gpuInfo = tfModule.env().getBool("WEBGL_VERSION");
+        setIsGpuAvailable(gpuInfo);
+
+        if (!gpuInfo) {
+          console.warn(
+            "WebGL（GPU）が利用できません。CPUモードにフォールバックします。"
+          );
+          await tfModule.setBackend("cpu");
+          await tfModule.ready();
+          setProcessingMode("CPU");
+        }
+      } else {
+        setLoadingProgress("CPUバックエンドを初期化中...");
+        await tfModule.setBackend("cpu");
+        await tfModule.ready();
+        setIsGpuAvailable(false);
+        setIsWebGpuAvailable(false);
+      }
+
+      console.log(`TensorFlow.js バックエンド: ${tfModule.getBackend()}`);
+    } catch (error) {
+      console.error("バックエンドの設定に失敗しました:", error);
+      // フォールバックとしてCPUを使用
+      await tfModule.setBackend("cpu");
+      await tfModule.ready();
+      setProcessingMode("CPU");
+      setIsGpuAvailable(false);
+      setIsWebGpuAvailable(false);
+    }
+  };
+
+  /**
    * 初期化処理
-   * モデルの種類が変更されるたびに実行される
+   * モデルの種類や処理方法が変更されるたびに実行される
    */
   useEffect(() => {
     const init = async () => {
@@ -155,7 +251,9 @@ const PoseDetector = (): JSX.Element => {
         detectorRef.current = null;
       }
 
-      setStatus(`ライブラリと"${modelType}"モデルを読み込み中...`);
+      setStatus(
+        `ライブラリと"${modelType}"モデルを読み込み中...（${processingMode}モード）`
+      );
       setLoadingProgress("ライブラリを読み込み中...");
 
       try {
@@ -163,20 +261,37 @@ const PoseDetector = (): JSX.Element => {
         const [tfModule, poseDetectionModule] = await Promise.all([
           import("@tensorflow/tfjs"),
           import("@tensorflow-models/pose-detection"),
-          import("@tensorflow/tfjs-backend-webgl"),
         ]);
 
-        setLoadingProgress("TensorFlow.jsを初期化中...");
-        await tfModule.setBackend("webgl");
-        await tfModule.ready();
+        // バックエンドを別途読み込み
+        const backendPromises: Promise<any>[] = [
+          import("@tensorflow/tfjs-backend-webgl"),
+        ];
 
-        setLoadingProgress(`${modelType}モデルを読み込み中...`);
+        if (processingMode === "CPU") {
+          backendPromises.push(import("@tensorflow/tfjs-backend-cpu"));
+        }
+
+        if (processingMode === "WebGPU") {
+          backendPromises.push(import("@tensorflow/tfjs-backend-webgpu"));
+        }
+
+        await Promise.all(backendPromises);
+
+        // バックエンドを設定
+        await setupTensorFlowBackend(tfModule, processingMode);
+
+        setLoadingProgress(
+          `${modelType}モデルを読み込み中...（${processingMode}モード）`
+        );
         const model = poseDetectionModule.SupportedModels.MoveNet;
         const detectorConfig: poseDetection.MoveNetModelConfig = {
           modelType:
             modelType === "Lightning"
               ? poseDetectionModule.movenet.modelType.SINGLEPOSE_LIGHTNING
-              : poseDetectionModule.movenet.modelType.SINGLEPOSE_THUNDER,
+              : modelType === "Thunder"
+              ? poseDetectionModule.movenet.modelType.SINGLEPOSE_THUNDER
+              : poseDetectionModule.movenet.modelType.MULTIPOSE_LIGHTNING,
         };
 
         // 骨格の接続情報をRefに保存
@@ -216,6 +331,8 @@ const PoseDetector = (): JSX.Element => {
         setIsLoading(false);
         setIsModelReady(false);
         setIsCameraReady(false);
+        setIsGpuAvailable(false);
+        setIsWebGpuAvailable(false);
       }
     };
 
@@ -233,7 +350,7 @@ const PoseDetector = (): JSX.Element => {
         stream.getTracks().forEach((track) => track.stop());
       }
     };
-  }, [modelType, detectPose]);
+  }, [modelType, processingMode, detectPose]);
 
   return (
     <div className="flex flex-col items-center p-6 bg-gray-50 min-h-screen">
@@ -244,32 +361,74 @@ const PoseDetector = (): JSX.Element => {
       {/* ローディング状態 */}
       {isLoading && (
         <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <div className="flex items-center space-x-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent"></div>
-            <div className="text-blue-700">
-              <div className="font-semibold">初期化中...</div>
-              <div className="text-sm">{loadingProgress}</div>
-            </div>
+          <div className="flex items-center space-x-3"></div>
+          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent"></div>
+          <div className="text-blue-700">
+            <div className="font-semibold">初期化中...</div>
+            <div className="text-sm">{loadingProgress}</div>
           </div>
         </div>
       )}
+
+      {/* 処理方法選択ボタン */}
+      <div className="flex justify-center space-x-4 mb-4">
+        <button
+          onClick={() => setProcessingMode("WebGPU")}
+          disabled={isLoading}
+          className={`px-6 py-2 ${
+            processingMode === "WebGPU"
+              ? "bg-purple-500 hover:bg-purple-600"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
+        >
+          WebGPU処理
+        </button>
+        <button
+          onClick={() => setProcessingMode("GPU")}
+          disabled={isLoading}
+          className={`px-6 py-2 ${
+            processingMode === "GPU"
+              ? "bg-red-500 hover:bg-red-600"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
+        >
+          GPU処理 (WebGL)
+        </button>
+        <button
+          onClick={() => setProcessingMode("CPU")}
+          disabled={isLoading}
+          className={`px-6 py-2 ${
+            processingMode === "CPU"
+              ? "bg-orange-500 hover:bg-orange-600"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
+        >
+          CPU処理
+        </button>
+      </div>
+
+      {/* モデル選択ボタン */}
       <div className="flex justify-center space-x-4 mb-4">
         <button
           onClick={() => setModelType("Lightning")}
-          disabled={
-            status.includes("Lightning") || status.includes("読み込み中")
-          }
-          className={`px-6 py-2 bg-blue-500 text-white font-semibold rounded-md shadow-md hover:bg-blue-600 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed          }`}
+          disabled={isLoading}
+          className="px-6 py-2 bg-blue-500 text-white font-semibold rounded-md shadow-md hover:bg-blue-600 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           Lightning (高速)
         </button>
         <button
           onClick={() => setModelType("Thunder")}
-          disabled={status.includes("Thunder") || status.includes("読み込み中")}
-          className={`px-6 py-2 bg-purple-600 text-white font-semibold rounded-md shadow-md hover:bg-purple-700 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed 
-          }`}
+          disabled={isLoading}
+          className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-md shadow-md hover:bg-purple-700 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
           Thunder (高精度)
+        </button>
+        <button
+          onClick={() => setModelType("multiPose")}
+          disabled={isLoading}
+          className="px-6 py-2 bg-green-500 text-white font-semibold rounded-md shadow-md hover:bg-green-600 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        >
+          multiPose (複数人)
         </button>
       </div>
 
@@ -296,10 +455,28 @@ const PoseDetector = (): JSX.Element => {
         <div className="px-4 py-2 bg-blue-100 text-blue-800 rounded-lg text-sm font-medium">
           使用モデル: {modelType}
         </div>
+        <div
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            processingMode === "WebGPU"
+              ? isWebGpuAvailable
+                ? "bg-purple-100 text-purple-800"
+                : "bg-yellow-100 text-yellow-800"
+              : processingMode === "GPU"
+              ? isGpuAvailable
+                ? "bg-red-100 text-red-800"
+                : "bg-yellow-100 text-yellow-800"
+              : "bg-orange-100 text-orange-800"
+          }`}
+        >
+          処理方法: {processingMode}
+          {processingMode === "WebGPU" && !isWebGpuAvailable && " (利用不可)"}
+          {processingMode === "GPU" && !isGpuAvailable && " (利用不可)"}
+        </div>
         <div className="px-4 py-2 bg-purple-100 text-purple-800 rounded-lg text-sm font-medium">
           検出人数: Null
         </div>
       </div>
+
       <div className="relative mb-6">
         <video
           ref={videoRef}
