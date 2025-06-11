@@ -1,4 +1,5 @@
 import Link from "next/link";
+import GitHubRepoCard from "@/components/git/GitHubRepoCard";
 
 export default function Home() {
   return (
@@ -39,6 +40,7 @@ export default function Home() {
             MoveNetを使用し、thunderとlightningの2つのモデルを切り替え可能にしたやつ
           </Link>
         </div>
+        <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>
   );
