@@ -34,6 +34,10 @@ export default function Home() {
           <Link href="/kennkyu/test5" className="text-blue-600 hover:underline">
             テスト5: 使用ライブラリをtensorflowに変更したやつ(複数人検出可能)
           </Link>
+          <Link href="/kennkyu/test6" className="text-blue-600 hover:underline">
+            テスト6:
+            MoveNetを使用し、thunderとlightningの2つのモデルを切り替え可能にしたやつ
+          </Link>
         </div>
       </main>
     </div>
