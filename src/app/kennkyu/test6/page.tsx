@@ -40,6 +40,8 @@ const PoseDetector = (): JSX.Element => {
   const [isGpuAvailable, setIsGpuAvailable] = useState(false);
   // WebGPU利用可能状態を管理するState
   const [isWebGpuAvailable, setIsWebGpuAvailable] = useState(false);
+  // モデルのフォールバック時に使用するState
+  const [isFallback, setIsFallback] = useState(false);
 
   /**
    * キーポイント（関節点）を描画する
@@ -185,6 +187,7 @@ const PoseDetector = (): JSX.Element => {
             "WebGPUが利用できません。GPU（WebGL）モードにフォールバックします。"
           );
           setProcessingMode("GPU");
+          setIsFallback(true);
           setLoadingProgress("GPU（WebGL）バックエンドを初期化中...");
           await tfModule.setBackend("webgl");
         } else {
@@ -239,6 +242,7 @@ const PoseDetector = (): JSX.Element => {
     const init = async () => {
       // 初期化開始
       setIsLoading(true);
+      setIsFallback(false);
       setIsModelReady(false);
       setIsCameraReady(false);
       setLoadingProgress("初期化中...");
@@ -264,16 +268,15 @@ const PoseDetector = (): JSX.Element => {
         ]);
 
         // バックエンドを別途読み込み
-        const backendPromises: Promise<any>[] = [
-          import("@tensorflow/tfjs-backend-webgl"),
-        ];
+        const backendPromises: Promise<any>[] = [];
 
         if (processingMode === "CPU") {
           backendPromises.push(import("@tensorflow/tfjs-backend-cpu"));
-        }
-
-        if (processingMode === "WebGPU") {
+        } else if (processingMode === "GPU") {
+          backendPromises.push(import("@tensorflow/tfjs-backend-webgl"));
+        } else if (processingMode === "WebGPU") {
           backendPromises.push(import("@tensorflow/tfjs-backend-webgpu"));
+          backendPromises.push(import("@tensorflow/tfjs-backend-webgl")); // WebGPU fallback
         }
 
         await Promise.all(backendPromises);
@@ -412,21 +415,33 @@ const PoseDetector = (): JSX.Element => {
         <button
           onClick={() => setModelType("Lightning")}
           disabled={isLoading}
-          className="px-6 py-2 bg-blue-500 text-white font-semibold rounded-md shadow-md hover:bg-blue-600 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className={`px-6 py-2 ${
+            modelType === "Lightning"
+              ? "bg-blue-500 hover:bg-blue-600"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
         >
           Lightning (高速)
         </button>
         <button
           onClick={() => setModelType("Thunder")}
           disabled={isLoading}
-          className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-md shadow-md hover:bg-purple-700 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className={`px-6 py-2 ${
+            modelType === "Thunder"
+              ? "bg-purple-600 hover:bg-purple-700"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
         >
           Thunder (高精度)
         </button>
         <button
           onClick={() => setModelType("multiPose")}
           disabled={isLoading}
-          className="px-6 py-2 bg-green-500 text-white font-semibold rounded-md shadow-md hover:bg-green-600 transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          className={`px-6 py-2 ${
+            modelType === "multiPose"
+              ? "bg-green-500 hover:bg-green-600"
+              : "bg-gray-500 hover:bg-gray-600"
+          } text-white font-semibold rounded-md shadow-md transition duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed`}
         >
           multiPose (複数人)
         </button>
@@ -476,6 +491,19 @@ const PoseDetector = (): JSX.Element => {
           検出人数: Null
         </div>
       </div>
+      {/* フォールバック時の警告表示 */}
+      {isFallback && (
+        <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <div className="text-yellow-700">
+            <div className="font-semibold">注意:</div>
+            <div className="text-sm">
+              WebGPUが利用できないため、GPU（WebGL）モードにフォールバックしました。
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* カメラ映像とCanvas */}
 
       <div className="relative mb-6">
         <video
