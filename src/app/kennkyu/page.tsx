@@ -29,7 +29,10 @@ export default function Home() {
         </p>
         <div className="flex flex-col gap-4">
           <Link href="/kennkyu/test4" className="text-blue-600 hover:underline">
-            テスト4:　初期バージョン
+            テスト4: 初期バージョン
+          </Link>
+          <Link href="/kennkyu/test5" className="text-blue-600 hover:underline">
+            テスト5: 使用ライブラリをtensorflowに変更したやつ(複数人検出可能)
           </Link>
         </div>
       </main>
