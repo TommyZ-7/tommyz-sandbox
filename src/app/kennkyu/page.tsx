@@ -39,6 +39,9 @@ export default function Home() {
             テスト6:
             MoveNetを使用し、thunderとlightningの2つのモデルを切り替え可能にしたやつ
           </Link>
+          <Link href="/kennkyu/test7" className="text-blue-600 hover:underline">
+            テスト7: テスト6から手の位置のみをキャンバスに描画するようにしたやつ
+          </Link>
         </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
