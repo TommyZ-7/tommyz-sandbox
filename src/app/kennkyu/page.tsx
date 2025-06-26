@@ -37,7 +37,7 @@ export default function Home() {
           </Link>
           <Link href="/kennkyu/test6" className="text-blue-600 hover:underline">
             テスト6:
-            MoveNetを使用し、thunderとlightningの2つのモデルを切り替え可能にしたやつ
+            MoveNetを使用し、thunderとlightning、multiposeの3つのモデルを切り替え可能にしたやつ
           </Link>
           <Link href="/kennkyu/test7" className="text-blue-600 hover:underline">
             テスト7: テスト6から手の位置のみをキャンバスに描画するようにしたやつ
