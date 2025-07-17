@@ -79,6 +79,7 @@ const PoseDetector = (): JSX.Element => {
     height: 720,
   });
   const [handCanvasAspectRatio, setHandCanvasAspectRatio] = useState("4:3");
+  const [handCanvasFullscreen, setHandCanvasFullscreen] = useState(false);
 
   // --- Refs for DOM elements and detection logic ---
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -243,6 +244,7 @@ const PoseDetector = (): JSX.Element => {
       const videoHeight = video.videoHeight;
       canvas.width = videoWidth;
       canvas.height = videoHeight;
+      // Note: handCanvasの解像度は固定。CSSで表示サイズのみ変更する。
       handCanvas.width = handCanvasDimensions.width;
       handCanvas.height = handCanvasDimensions.height;
 
@@ -484,8 +486,7 @@ const PoseDetector = (): JSX.Element => {
         setIsLoading(false);
       }
     };
-    console.log("Selected Camera ID:", selectedCameraId);
-    if (selectedCameraId) init();
+    init();
 
     return () => {
       if (videoRef.current?.srcObject) {
@@ -670,35 +671,76 @@ const PoseDetector = (): JSX.Element => {
           </div>
         </div>
         <div className="flex-shrink-0 w-full lg:w-auto">
-          <div className="mb-3">
-            <label className="block text-lg font-semibold text-gray-700 mb-2">
-              手の位置 (アスペクト比)
-            </label>
-            <div className="flex space-x-1 rounded-md shadow-sm" role="group">
-              {["4:3", "16:9", "1:1", "3:4"].map((ratio) => (
-                <button
-                  key={ratio}
-                  onClick={() => setHandCanvasAspectRatio(ratio)}
-                  className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg ${
-                    handCanvasAspectRatio === ratio
-                      ? "bg-teal-500 text-white"
-                      : "bg-white"
-                  }`}
-                >
-                  {ratio}
-                </button>
-              ))}
+          {/* ▼▼▼ 変更箇所 ▼▼▼ */}
+          <div className="flex items-center mb-3">
+            <div>
+              <label className="block text-lg font-semibold text-gray-700 mb-2">
+                手の位置 (アスペクト比)
+              </label>
+              <div className="flex space-x-1 rounded-md shadow-sm" role="group">
+                {["4:3", "16:9", "1:1", "3:4"].map((ratio) => (
+                  <button
+                    key={ratio}
+                    onClick={() => setHandCanvasAspectRatio(ratio)}
+                    className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg ${
+                      handCanvasAspectRatio === ratio
+                        ? "bg-teal-500 text-white"
+                        : "bg-white"
+                    }`}
+                  >
+                    {ratio}
+                  </button>
+                ))}
+              </div>
             </div>
+            {/* フルスクリーン切り替えボタンを追加 */}
+            <button
+              onClick={() => setHandCanvasFullscreen(!handCanvasFullscreen)}
+              className="ml-4 mt-8 px-3 py-2 text-sm font-medium border rounded-lg shadow-sm bg-white hover:bg-gray-50 transition"
+              aria-label={
+                handCanvasFullscreen ? "通常表示に戻す" : "フルスクリーンで表示"
+              }
+            >
+              {handCanvasFullscreen ? "戻す" : "最大化"}
+            </button>
           </div>
+          {/* handCanvasのコンテナとスタイルを動的に変更 */}
           <div
-            className="border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-800 mx-auto"
-            style={{
-              width: `${handCanvasDimensions.width}px`,
-              height: `${handCanvasDimensions.height}px`,
+            className={
+              handCanvasFullscreen
+                ? "fixed top-0 left-0 w-screen h-screen bg-black flex justify-center items-center z-50 cursor-zoom-out"
+                : "border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-800 mx-auto"
+            }
+            style={
+              !handCanvasFullscreen
+                ? {
+                    width: `${handCanvasDimensions.width}px`,
+                    height: `${handCanvasDimensions.height}px`,
+                  }
+                : {}
+            }
+            // フルスクリーン時に背景クリックで通常表示に戻す
+            onClick={() => {
+              if (handCanvasFullscreen) setHandCanvasFullscreen(false);
             }}
           >
-            <canvas ref={handCanvasRef} style={{ display: "block" }} />
+            <canvas
+              ref={handCanvasRef}
+              className={handCanvasFullscreen ? "cursor-default" : ""}
+              style={
+                handCanvasFullscreen
+                  ? // フルスクリーン時のスタイル: 縦幅100%でアスペクト比を維持
+                    { height: "100%", width: "auto", transform: "scaleX(-1)" }
+                  : // 通常時のスタイル
+                    { display: "block", transform: "scaleX(-1)" }
+              }
+              // キャンバス自体のクリックでフルスクリーンが解除されないようにする
+              onClick={(e) => {
+                if (handCanvasFullscreen) e.stopPropagation();
+              }}
+            />
           </div>
+          {/* ▲▲▲ 変更箇所 ▲▲▲ */}
         </div>
       </div>
 
