@@ -51,7 +51,7 @@ export default function Home() {
         </p>
         <div className="flex flex-col gap-4">
           <Link href="/kennkyu/test8" className="text-blue-600 hover:underline">
-            テスト8: 手の認識範囲を指定する
+            テスト8: 手の認識範囲を指定できるようにしたやつ
           </Link>
         </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
