@@ -1,4 +1,5 @@
 import Link from "next/link";
+import GitHubRepoCard from "@/components/git/GitHubRepoCard";
 
 export default function Home() {
   return (
@@ -29,9 +30,20 @@ export default function Home() {
         </p>
         <div className="flex flex-col gap-4">
           <Link href="/kennkyu/test4" className="text-blue-600 hover:underline">
-            テスト4:　初期バージョン
+            テスト4: 初期バージョン
+          </Link>
+          <Link href="/kennkyu/test5" className="text-blue-600 hover:underline">
+            テスト5: 使用ライブラリをtensorflowに変更したやつ(複数人検出可能)
+          </Link>
+          <Link href="/kennkyu/test6" className="text-blue-600 hover:underline">
+            テスト6:
+            MoveNetを使用し、thunderとlightning、multiposeの3つのモデルを切り替え可能にしたやつ
+          </Link>
+          <Link href="/kennkyu/test7" className="text-blue-600 hover:underline">
+            テスト7: テスト6から手の位置のみをキャンバスに描画するようにしたやつ
           </Link>
         </div>
+        <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>
   );
