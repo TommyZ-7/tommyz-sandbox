@@ -64,6 +64,56 @@ const Matrix = {
   },
 };
 
+// ▼▼▼ 変更箇所 ここから ▼▼▼
+
+/**
+ * パーティクルエフェクトのためのクラス
+ */
+class Particle {
+  x: number;
+  y: number;
+  size: number;
+  vx: number;
+  vy: number;
+  life: number;
+  initialLife: number;
+  color: string;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+    this.size = Math.random() * 5 + 2; // サイズ: 2pxから7px
+    this.vx = (Math.random() - 0.5) * 4; // 水平方向の初速
+    this.vy = (Math.random() - 0.5) * 4; // 垂直方向の初速
+    this.life = Math.random() * 50 + 50; // 寿命: 50-100フレーム
+    this.initialLife = this.life;
+    this.color = `hsl(${Math.random() * 360}, 100%, 70%)`; // ランダムな鮮やかな色
+  }
+
+  // パーティクルの状態を更新
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vy += 0; // わずかな重力
+    this.life -= 1;
+    this.size *= 0.98; // 少しずつ小さくする
+  }
+
+  // パーティクルを描画
+  draw(ctx: CanvasRenderingContext2D) {
+    ctx.save();
+    // 寿命に応じてフェードアウト
+    ctx.globalAlpha = Math.max(0, this.life / this.initialLife);
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, Math.max(0, this.size), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ▲▲▲ 変更箇所 ここまで ▲▲▲
+
 const PoseDetector = (): JSX.Element => {
   // --- State Hooks ---
   const [modelType, setModelType] = useState<ModelType>("Lightning");
@@ -88,6 +138,18 @@ const PoseDetector = (): JSX.Element => {
   const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
   const adjacentPairsRef = useRef<[number, number][] | null>(null);
 
+  // ▼▼▼ 変更箇所 ここから ▼▼▼
+  // パーティクルと手の最後の描画位置を管理するためのRef
+  const particlesRef = useRef<Particle[]>([]);
+  const lastHandPositionsRef = useRef<{
+    left: Point | null;
+    right: Point | null;
+  }>({
+    left: null,
+    right: null,
+  });
+  // ▲▲▲ 変更箇所 ここまで ▲▲▲
+
   // --- State for interactive quadrilateral ---
   const [quadPoints, setQuadPoints] = useState<Point[]>([
     { x: 320, y: 180 },
@@ -98,7 +160,7 @@ const PoseDetector = (): JSX.Element => {
   const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(
     null
   );
-  const DRAG_HANDLE_SIZE = 15; // 頂点のドラッグハンドルの半径（タッチしやすくするため拡大）
+  const DRAG_HANDLE_SIZE = 15;
 
   // --- Memoized calculations ---
   const handCanvasDimensions = useMemo(() => {
@@ -233,7 +295,8 @@ const PoseDetector = (): JSX.Element => {
     ctx.fillText(label, point.x - 5, point.y + 5);
   };
 
-  // ▼▼▼ 変更箇所 ▼▼▼
+  // ▼▼▼ 変更箇所 ここから ▼▼▼
+  // パーティクルエフェクトと手の描画ロジックを統合した関数
   const drawResults = useCallback(
     (poses: poseDetection.Pose[]) => {
       const video = videoRef.current;
@@ -241,18 +304,12 @@ const PoseDetector = (): JSX.Element => {
       const handCanvas = handCanvasRef.current;
       if (!video || !canvas || !handCanvas || video.videoWidth === 0) return;
 
-      // メインキャンバスの解像度設定
-      const videoWidth = video.videoWidth;
-      const videoHeight = video.videoHeight;
-      canvas.width = videoWidth;
-      canvas.height = videoHeight;
-
-      // --- 手のキャンバスの解像度を動的に設定 ---
+      // --- キャンバスの解像度設定 ---
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       if (handCanvasFullscreen) {
-        // フルスクリーン時: 表示領域のサイズを取得して解像度に設定
         const rect = handCanvas.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) {
-          // 解像度が現在の表示サイズと異なる場合のみ更新
           if (
             handCanvas.width !== rect.width ||
             handCanvas.height !== rect.height
@@ -262,7 +319,6 @@ const PoseDetector = (): JSX.Element => {
           }
         }
       } else {
-        // 通常時: useMemoで計算した固定の解像度を設定
         handCanvas.width = handCanvasDimensions.width;
         handCanvas.height = handCanvasDimensions.height;
       }
@@ -271,7 +327,7 @@ const PoseDetector = (): JSX.Element => {
       const handCtx = handCanvas.getContext("2d");
       if (!ctx || !handCtx) return;
 
-      // メインキャンバスの描画
+      // --- メインキャンバスの描画 ---
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const pose of poses) {
         if (pose.keypoints) {
@@ -281,53 +337,97 @@ const PoseDetector = (): JSX.Element => {
       }
       drawInteractiveOverlay(ctx);
 
-      // 手のキャンバスの描画
+      // --- 手のキャンバスの背景描画 ---
       handCtx.fillStyle = "#1a1a1a";
       handCtx.fillRect(0, 0, handCanvas.width, handCanvas.height);
 
-      // ホモグラフィ変換の宛先座標は、更新されたキャンバス解像度に基づく
+      // --- パーティクルの生成関数 ---
+      const emitParticles = (x: number, y: number) => {
+        for (let i = 0; i < 20; i++) {
+          particlesRef.current.push(new Particle(x, y));
+        }
+      };
+
+      // --- パーティクルの更新と描画 ---
+      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+        const p = particlesRef.current[i];
+        p.update();
+        p.draw(handCtx);
+        if (p.life <= 0) {
+          particlesRef.current.splice(i, 1); // 寿命が尽きたら削除
+        }
+      }
+
+      // --- ホモグラフィ変換の準備 ---
       const dstPoints: Point[] = [
         { x: 0, y: 0 },
         { x: handCanvas.width, y: 0 },
         { x: handCanvas.width, y: handCanvas.height },
         { x: 0, y: handCanvas.height },
       ];
-
       const h = getHomographyMatrix(quadPoints, dstPoints);
       if (!h) return;
 
+      // --- 手の検出、マーカー描画、エフェクトトリガー ---
+      let isLeftHandVisible = false;
+      let isRightHandVisible = false;
+
       for (const pose of poses) {
-        if (pose.keypoints) {
-          const leftWrist = pose.keypoints[9];
-          const rightWrist = pose.keypoints[10];
-          if (
-            leftWrist?.score &&
-            leftWrist.score > 0.5 &&
-            isPointInQuad(leftWrist, quadPoints)
-          ) {
-            drawHandMarker(
-              handCtx,
-              transformPoint(leftWrist, h),
-              "L",
-              "#ff6b6b"
+        if (!pose.keypoints) continue;
+        const leftWrist = pose.keypoints[9];
+        const rightWrist = pose.keypoints[10];
+
+        // 左手の処理
+        if (
+          leftWrist?.score &&
+          leftWrist.score > 0.5 &&
+          isPointInQuad(leftWrist, quadPoints)
+        ) {
+          isLeftHandVisible = true;
+          const transformedPoint = transformPoint(leftWrist, h);
+
+          const lastPos = lastHandPositionsRef.current.left;
+          if (lastPos) {
+            const distance = Math.sqrt(
+              (transformedPoint.x - lastPos.x) ** 2 +
+                (transformedPoint.y - lastPos.y) ** 2
             );
+            // 5px以上動いたらパーティクルを生成
+            if (distance > 5) {
+              emitParticles(transformedPoint.x, transformedPoint.y);
+            }
           }
-          if (
-            rightWrist?.score &&
-            rightWrist.score > 0.5 &&
-            isPointInQuad(rightWrist, quadPoints)
-          ) {
-            drawHandMarker(
-              handCtx,
-              transformPoint(rightWrist, h),
-              "R",
-              "#4ecdc4"
+          lastHandPositionsRef.current.left = transformedPoint;
+        }
+
+        // 右手の処理
+        if (
+          rightWrist?.score &&
+          rightWrist.score > 0.5 &&
+          isPointInQuad(rightWrist, quadPoints)
+        ) {
+          isRightHandVisible = true;
+          const transformedPoint = transformPoint(rightWrist, h);
+
+          const lastPos = lastHandPositionsRef.current.right;
+          if (lastPos) {
+            const distance = Math.sqrt(
+              (transformedPoint.x - lastPos.x) ** 2 +
+                (transformedPoint.y - lastPos.y) ** 2
             );
+            // 5px以上動いたらパーティクルを生成
+            if (distance > 5) {
+              emitParticles(transformedPoint.x, transformedPoint.y);
+            }
           }
+          lastHandPositionsRef.current.right = transformedPoint;
         }
       }
+
+      // 手が範囲外に出たら、最後の位置をリセット
+      if (!isLeftHandVisible) lastHandPositionsRef.current.left = null;
+      if (!isRightHandVisible) lastHandPositionsRef.current.right = null;
     },
-    // 依存配列にhandCanvasFullscreenを追加し、状態変更時にこの関数が再生成されるようにする
     [
       quadPoints,
       drawInteractiveOverlay,
@@ -335,7 +435,7 @@ const PoseDetector = (): JSX.Element => {
       handCanvasFullscreen,
     ]
   );
-  // ▲▲▲ 変更箇所 ▲▲▲
+  // ▲▲▲ 変更箇所 ここまで ▲▲▲
 
   // --- Pointer Event Handlers for Interactive Quad (Mouse & Touch) ---
   const getPointerPos = (
