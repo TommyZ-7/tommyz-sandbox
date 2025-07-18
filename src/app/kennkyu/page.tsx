@@ -54,7 +54,13 @@ export default function Home() {
             テスト8: 手の認識範囲を指定できるようにしたやつ
           </Link>
           <Link href="/kennkyu/test9" className="text-blue-600 hover:underline">
-            テスト9: テスト9に光がほとばしるようなエフェクトを追加したやつ
+            テスト9: テスト8に光がほとばしるようなエフェクトを追加したやつ
+          </Link>
+          <Link
+            href="/kennkyu/test10"
+            className="text-blue-600 hover:underline"
+          >
+            テスト10: テスト9に音声を追加したやつ
           </Link>
         </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
