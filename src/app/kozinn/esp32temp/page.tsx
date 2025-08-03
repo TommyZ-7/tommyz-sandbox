@@ -106,7 +106,7 @@ export default function Home() {
     try {
       // --- 実際のマイコンに接続する場合 ---
       // 以下の行のコメントを解除し、下のモックデータ行をコメントアウトしてください
-      const response = await fetch(`http://${currentIp}:${currentPort}/temp`);
+      const response = await fetch(`https://${currentIp}:${currentPort}/temp`);
       if (!response.ok) {
         throw new Error(`HTTPエラー: ${response.status}`);
       }
