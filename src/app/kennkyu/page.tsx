@@ -51,7 +51,7 @@ export default function HomePage() {
             Developed by Katsuya I, Tomoya T
           </motion.p>
           <motion.button
-            onClick={() => window.open("/kennkyu/research", "_blank")}
+            onClick={() => router.push("/kennkyu/research")}
             className="bg-cyan-500 text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-cyan-400 transition-all transform hover:scale-105 shadow-lg shadow-cyan-500/30"
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
