@@ -12,22 +12,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, WifiOff, Thermometer, History, Server, Zap } from "lucide-react";
 
-// 開発用のモックデータ生成関数
-// 実際のマイコンがなくても動作確認ができます
-const generateMockData = () => {
-  const baseTemp = 25 + Math.sin(Date.now() / 30000) * 5; // 時間で緩やかに変化
-  const history = Array.from({ length: 120 }, (_, i) => {
-    const fluctuation = Math.random() * 0.5 - 0.25;
-    const trend = (i / 120) * 2 - 1;
-    return parseFloat((baseTemp + fluctuation + trend).toFixed(2));
-  });
-  return {
-    current_temp: history[history.length - 1],
-    history: history,
-  };
-};
-
-// Tooltipのカスタムコンポーネント
+// Tooltipのカスタムコンポーネントを更新
 const CustomTooltip = ({
   active,
   payload,
@@ -35,15 +20,31 @@ const CustomTooltip = ({
 }: {
   active?: boolean;
   payload?: any[];
-  label?: string;
+  label?: number;
 }) => {
+  // labelにはXAxisのdataKeyである`secondsAgo`が入る
   if (active && payload && payload.length) {
+    const secondsAgo = label;
+    let timeLabel;
+
+    if (secondsAgo !== undefined && secondsAgo === 0) {
+      timeLabel = "現在";
+    } else if (secondsAgo !== undefined) {
+      const minutes = Math.floor(secondsAgo / 60);
+      const seconds = secondsAgo % 60;
+      if (minutes > 0) {
+        timeLabel = `${minutes}分${seconds}秒前`;
+      } else {
+        timeLabel = `${seconds}秒前`;
+      }
+    }
+
     return (
       <div className="p-3 bg-gray-700/50 backdrop-blur-sm border border-gray-600 rounded-lg shadow-lg">
         <p className="text-sm text-cyan-300">{`温度: ${payload[0].value.toFixed(
           2
         )} °C`}</p>
-        <p className="text-xs text-gray-400">過去データ</p>
+        <p className="text-xs text-gray-400">{timeLabel}</p>
       </div>
     );
   }
@@ -105,15 +106,15 @@ export default function Home() {
     try {
       // --- 実際のマイコンに接続する場合 ---
       // 以下の行のコメントを解除し、下のモックデータ行をコメントアウトしてください
-      // const response = await fetch(`http://${currentIp}:${currentPort}/`);
-      // if (!response.ok) {
-      //   throw new Error(`HTTPエラー: ${response.status}`);
-      // }
-      // const jsonData = await response.json();
+      const response = await fetch(`http://${currentIp}:${currentPort}/temp`);
+      if (!response.ok) {
+        throw new Error(`HTTPエラー: ${response.status}`);
+      }
+      const jsonData = await response.json();
 
       // --- 開発用のモックデータ ---
       // 上の実際の接続コードを有効にする場合は、この行をコメントアウトしてください
-      const jsonData: TemperatureData = generateMockData();
+      // const jsonData: TemperatureData = generateMockData();
 
       setData(jsonData);
       return true;

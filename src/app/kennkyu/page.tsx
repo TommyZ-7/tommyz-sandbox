@@ -24,9 +24,7 @@ export default function HomePage() {
   return (
     <>
       <Header />
-      {/* ヒーローセクション */}
       <section className="h-screen flex items-center justify-center text-center bg-gray-900 -mt-24">
-        {/* ... (元のHomePageのヒーローセクションのJSXをここにコピー) ... */}
         <div className="z-10 relative">
           <motion.h1
             className="text-5xl md:text-7xl font-extrabold text-white mb-4"
