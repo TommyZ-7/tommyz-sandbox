@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, WifiOff, Thermometer, History, Server, Zap } from "lucide-react";
 
-// Tooltipのカスタムコンポーネント
+// Tooltipのカスタムコンポーネントを更新
 const CustomTooltip = ({
   active,
   payload,
@@ -20,15 +20,31 @@ const CustomTooltip = ({
 }: {
   active?: boolean;
   payload?: any[];
-  label?: string;
+  label?: number;
 }) => {
+  // labelにはXAxisのdataKeyである`secondsAgo`が入る
   if (active && payload && payload.length) {
+    const secondsAgo = label;
+    let timeLabel;
+
+    if (secondsAgo !== undefined && secondsAgo === 0) {
+      timeLabel = "現在";
+    } else if (secondsAgo !== undefined) {
+      const minutes = Math.floor(secondsAgo / 60);
+      const seconds = secondsAgo % 60;
+      if (minutes > 0) {
+        timeLabel = `${minutes}分${seconds}秒前`;
+      } else {
+        timeLabel = `${seconds}秒前`;
+      }
+    }
+
     return (
       <div className="p-3 bg-gray-700/50 backdrop-blur-sm border border-gray-600 rounded-lg shadow-lg">
         <p className="text-sm text-cyan-300">{`温度: ${payload[0].value.toFixed(
           2
         )} °C`}</p>
-        <p className="text-xs text-gray-400">過去データ</p>
+        <p className="text-xs text-gray-400">{timeLabel}</p>
       </div>
     );
   }
