@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, WifiOff, Thermometer, History, Server, Zap } from "lucide-react";
 
-// Tooltipのカスタムコンポーネントを更新
+// Tooltipのカスタムコンポーネント
 const CustomTooltip = ({
   active,
   payload,
@@ -20,16 +20,16 @@ const CustomTooltip = ({
 }: {
   active?: boolean;
   payload?: any[];
-  label?: number;
+  label?: any;
 }) => {
   // labelにはXAxisのdataKeyである`secondsAgo`が入る
   if (active && payload && payload.length) {
     const secondsAgo = label;
     let timeLabel;
 
-    if (secondsAgo !== undefined && secondsAgo === 0) {
+    if (secondsAgo === 0) {
       timeLabel = "現在";
-    } else if (secondsAgo !== undefined) {
+    } else {
       const minutes = Math.floor(secondsAgo / 60);
       const seconds = secondsAgo % 60;
       if (minutes > 0) {
@@ -72,8 +72,8 @@ const AnimatedNumber = ({ value }: { value: number }) => {
 };
 
 export default function Home() {
-  const [ipAddress, setIpAddress] = useState("192.168.1.10");
-  const [port, setPort] = useState("80");
+  const [ipAddress, setIpAddress] = useState("localhost");
+  const [port, setPort] = useState("8001");
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState("");
@@ -105,17 +105,12 @@ export default function Home() {
     setError("");
     try {
       // --- 実際のマイコンに接続する場合 ---
-      // 以下の行のコメントを解除し、下のモックデータ行をコメントアウトしてください
       const response = await fetch(`https://${currentIp}:${currentPort}/temp`);
       if (!response.ok) {
         throw new Error(`HTTPエラー: ${response.status}`);
       }
       const jsonData = await response.json();
-
-      // --- 開発用のモックデータ ---
-      // 上の実際の接続コードを有効にする場合は、この行をコメントアウトしてください
-      // const jsonData: TemperatureData = generateMockData();
-
+      jsonData.history.reverse();
       setData(jsonData);
       return true;
     } catch (e: unknown) {
@@ -130,11 +125,6 @@ export default function Home() {
       return false;
     }
   };
-
-  interface ConnectFormData {
-    ipAddress: string;
-    port: string;
-  }
 
   const handleConnect = async (
     e: React.FormEvent<HTMLFormElement>
@@ -348,10 +338,10 @@ export default function Home() {
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart
                         data={data.history.map((temp, index) => ({
-                          name: index,
                           temp: temp,
+                          secondsAgo: (index + 1) * 5,
                         }))}
-                        margin={{ top: 5, right: 20, left: -10, bottom: 5 }}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                       >
                         <defs>
                           <linearGradient
@@ -374,19 +364,38 @@ export default function Home() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        {/* X軸: 何秒前のデータかを表示(hms形式) */}
                         <XAxis
-                          dataKey="name"
+                          dataKey="secondsAgo"
                           tick={{ fill: "#9ca3af" }}
                           stroke="#4b5563"
                           tickLine={false}
                           axisLine={false}
+                          tickFormatter={(totalSeconds) => {
+                            const hours = Math.floor(totalSeconds / 3600);
+                            const minutes = Math.floor(
+                              (totalSeconds % 3600) / 60
+                            );
+                            const seconds = totalSeconds % 60;
+                            const pad = (num: number) =>
+                              num.toString().padStart(2, "0");
+
+                            if (hours > 0) {
+                              return `${hours}:${pad(minutes)}:${pad(seconds)}`;
+                            }
+                            return `${minutes}:${pad(seconds)}`;
+                          }}
+                          reversed={true}
                         />
+                        {/* Y軸: 温度を表示。単位ラベルを追加 */}
                         <YAxis
                           tick={{ fill: "#9ca3af" }}
                           stroke="#4b5563"
                           domain={["dataMin - 1", "dataMax + 1"]}
                           tickLine={false}
                           axisLine={false}
+                          // 小数点3桁まで
+                          tickFormatter={(temp) => `${temp.toFixed(3)}`}
                         />
                         <Tooltip
                           content={<CustomTooltip />}
