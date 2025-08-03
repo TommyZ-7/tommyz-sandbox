@@ -12,7 +12,7 @@ export default function ResearchListPage() {
     <>
       <Header />
       <div className="container mx-auto px-6 mt-24">
-        <Link href="/kennkyu">
+        <Link href="/kennkyu2">
           <motion.div
             className="flex items-center text-cyan-400 hover:text-cyan-300 mb-8 transition-colors cursor-pointer"
             whileHover={{ x: -5 }}
@@ -35,7 +35,10 @@ export default function ResearchListPage() {
             .slice()
             .reverse()
             .map((research) => (
-              <Link href={`/kennkyu/research/${research.id}`} key={research.id}>
+              <Link
+                href={`/kennkyu2/research/${research.id}`}
+                key={research.id}
+              >
                 <ResearchCard research={research} />
               </Link>
             ))}

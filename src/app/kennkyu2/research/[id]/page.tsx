@@ -96,7 +96,7 @@ export default function ResearchDetailPage({ params }: DetailPageProps) {
                 </p>
                 {pub.url && (
                   <a
-                    href={`/kennkyu/${pub.url}`}
+                    href={`/kennkyu2/${pub.url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-cyan-400 hover:underline mt-2 inline-block"
