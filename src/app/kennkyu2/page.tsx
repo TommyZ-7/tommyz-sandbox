@@ -92,7 +92,7 @@ export default function HomePage() {
                   transition={{ type: "spring", stiffness: 300 }}
                 >
                   <a
-                    href={`/kennkyu2/${latestPublication.url}`}
+                    href={`/kennkyu/${latestPublication.url}`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

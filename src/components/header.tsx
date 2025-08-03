@@ -11,7 +11,7 @@ export const Header = () => {
     <header className="fixed top-0 left-0 right-0 bg-gray-900 bg-opacity-80 backdrop-blur-md z-50 border-b border-gray-700">
       <div className="container mx-auto px-6 py-4 flex justify-between items-center">
         <Link
-          href="/kennkyu"
+          href="/kennkyu2"
           className="text-2xl font-bold text-white cursor-pointer flex items-center gap-2"
         >
           <FlaskConical className="text-cyan-400" />
@@ -19,7 +19,7 @@ export const Header = () => {
         </Link>
         <nav className="hidden md:flex items-center space-x-6">
           <Link
-            href="/kennkyu"
+            href="/kennkyu2"
             className={`text-lg ${
               pathname === "/" ? "text-cyan-400" : "text-gray-300"
             } hover:text-cyan-400 transition-colors`}
@@ -27,7 +27,7 @@ export const Header = () => {
             ホーム
           </Link>
           <Link
-            href="/kennkyu/research"
+            href="/kennkyu2/research"
             className={`text-lg ${
               pathname.startsWith("/research")
                 ? "text-cyan-400"
