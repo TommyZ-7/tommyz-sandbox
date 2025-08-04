@@ -22,7 +22,6 @@ const CustomTooltip = ({
   payload?: any[];
   label?: any;
 }) => {
-  // labelにはXAxisのdataKeyである`secondsAgo`が入る
   if (active && payload && payload.length) {
     const secondsAgo = label;
     let timeLabel;
@@ -51,23 +50,55 @@ const CustomTooltip = ({
   return null;
 };
 
-// 数字をアニメーションさせるコンポーネント
-const AnimatedNumber = ({ value }: { value: number }) => {
-  const [currentValue, setCurrentValue] = useState(value);
+// 1桁の数字を表示し、スロットマシンのように回転するアニメーションを実装するコンポーネント
+const DigitSlot = ({ digit }: { digit: string }) => {
+  const numbers = "0123456789";
+  const digitIndex = numbers.indexOf(digit);
 
-  useEffect(() => {
-    setCurrentValue(value);
-  }, [value]);
+  // 'em' 単位を使うことで、親要素のフォントサイズに連動する
+  const y = `-${digitIndex}em`;
 
   return (
-    <motion.span
-      key={value}
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
+    <motion.div
+      // y座標を目的の数字の位置にアニメーションさせる
+      animate={{ y }}
+      // アニメーションの挙動をspring（バネ）に設定
+      transition={{ type: "spring", stiffness: 150, damping: 20 }}
+      className="flex flex-col"
     >
-      {currentValue.toFixed(2)}
-    </motion.span>
+      {numbers.split("").map((num) => (
+        // 各数字が親要素のline-heightと同じ高さを持つようにする (text-7xlはline-height: 1)
+        <span key={num} className="h-[1em]">
+          {num}
+        </span>
+      ))}
+    </motion.div>
+  );
+};
+
+// 温度の数値をスロットアニメーションで表示するコンポーネント
+const AnimatedNumber = ({ value }: { value: number }) => {
+  // 数値を小数点以下2桁の文字列に変換 (例: 25.36)
+  const valueString = value.toFixed(2);
+
+  return (
+    // Flexboxを使い、各桁を横に並べる
+    // h-[1em] と overflow-hidden で1行分の高さにクリップする
+    <div className="flex h-[1em] overflow-hidden">
+      {valueString.split("").map((char, index) => {
+        // 文字が小数点の場合
+        if (char === ".") {
+          return (
+            // 小数点はアニメーションさせずに静的に表示
+            <span key={index} className="h-[1em]">
+              .
+            </span>
+          );
+        }
+        // 文字が数字の場合
+        return <DigitSlot key={index} digit={char} />;
+      })}
+    </div>
   );
 };
 
@@ -364,7 +395,6 @@ export default function Home() {
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        {/* X軸: 何秒前のデータかを表示(hms形式) */}
                         <XAxis
                           dataKey="secondsAgo"
                           tick={{ fill: "#9ca3af" }}
@@ -387,14 +417,12 @@ export default function Home() {
                           }}
                           reversed={true}
                         />
-                        {/* Y軸: 温度を表示。単位ラベルを追加 */}
                         <YAxis
                           tick={{ fill: "#9ca3af" }}
                           stroke="#4b5563"
                           domain={["dataMin - 1", "dataMax + 1"]}
                           tickLine={false}
                           axisLine={false}
-                          // 小数点3桁まで
                           tickFormatter={(temp) => `${temp.toFixed(3)}`}
                         />
                         <Tooltip
