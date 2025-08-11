@@ -63,6 +63,12 @@ export default function Home() {
             テスト10: テスト9に音声を追加したやつ
           </Link>
         </div>
+        <h1 className="text-3xl font-bold text-center sm:text-left">
+          7月18日ミーティング後開発物
+        </h1>
+        <p className="text-lg text-gray-700 text-center sm:text-left">
+          手と全体の2パターンで進める。動作データの保存、音の選択、背景の変更機能を実装予定。
+        </p>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>

@@ -4,11 +4,13 @@
 // useRefを追加
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 // ▲▲▲ 変更・追加箇所 ここまで ▲▲▲
+import { Sounds, SoundList } from "@/components/data";
 
 // TensorFlow.jsとPose Detectionの型定義のみをインポートします。
 // ライブラリ本体は実行時に動的に読み込みます。
 import type * as poseDetection from "@tensorflow-models/pose-detection";
 import type * as tf from "@tensorflow/tfjs";
+import { randomFill } from "node:crypto";
 
 // モデルタイプを型として定義
 type ModelType = "Lightning" | "Thunder" | "multiPose";
@@ -145,17 +147,23 @@ const PoseDetector = (): JSX.Element => {
     left: null,
     right: null,
   });
+  const [selectedSound, setSelectedSound] = useState<SoundList | null>(null);
 
+  // ▼▼▼ 変更・追加箇所 ここから ▼▼▼
   // 音声再生用のRef
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // コンポーネントマウント時に音声ファイルを読み込む
-  useEffect(() => {
-    // NOTE: publicディレクトリなどに配置した実際の音声ファイルパスに書き換えてください。
-    // 例: "/sounds/particle-effect.wav"
-    audioRef.current = new Audio("/sounds/puyon.mp3");
+  // 追加: 現在再生中かどうかを判定するヘルパー
+  const isAudioPlaying = () => {
+    const a = audioRef.current;
+    return !!a && !a.paused && !a.ended && a.currentTime > 0;
+  };
+
+  const changeSound = (sound: SoundList) => {
+    audioRef.current = new Audio(sound.dir + ".mp3");
     audioRef.current.load();
-  }, []);
+    console.log("Changed sound to:", sound.dir + ".mp3");
+  };
 
   // --- State for interactive quadrilateral ---
   const [quadPoints, setQuadPoints] = useState<Point[]>([
@@ -334,12 +342,17 @@ const PoseDetector = (): JSX.Element => {
       const emitParticles = (x: number, y: number) => {
         // 音声を再生
         if (audioRef.current) {
-          // 再生が連続したときに備え、再生位置を先頭に戻す
-          audioRef.current.currentTime = 0;
-          // play()はPromiseを返すため、エラーハンドリングを行う
-          audioRef.current.play().catch((error) => {
-            console.error("Audio playback failed:", error);
-          });
+          // すでに再生中なら次の再生を抑止
+          if (isAudioPlaying()) {
+            // 必要ならログ
+            // console.log("Audio is still playing. Skip starting new one.");
+          } else {
+            // 再生していなければ頭から再生
+            audioRef.current.currentTime = 0;
+            audioRef.current.play().catch((error) => {
+              console.error("Audio playback failed:", error);
+            });
+          }
         }
 
         for (let i = 0; i < 20; i++) {
@@ -915,6 +928,40 @@ const PoseDetector = (): JSX.Element => {
           </div>
         </div>
       )}
+
+      <div className="mt-6 w-full max-w-5xl">
+        <h3 className="text-lg font-semibold text-gray-700 mb-3">音声設定</h3>
+        <div className="mt-2">
+          <label className="flex items-center space-x-2 text-sm">
+            <span className="text-gray-700">音声:</span>
+            <select
+              value={selectedSound?.name}
+              onChange={(e) => {
+                const foundSound = Sounds.find(
+                  (sound) => sound.name === e.target.value
+                );
+                if (foundSound) {
+                  changeSound(foundSound);
+                }
+              }}
+              className="border rounded-md text-gray-700 p-1"
+            >
+              <option value="" className="text-gray-700">
+                選択してください
+              </option>
+              {Sounds.map((sound) => (
+                <option
+                  key={sound.name}
+                  value={sound.name}
+                  className="text-gray-700"
+                >
+                  {sound.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
     </div>
   );
 };

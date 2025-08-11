@@ -15,6 +15,12 @@ export type Research = {
   publications: Publication[];
 };
 
+export type SoundList = {
+  name: string;
+  dir: string;
+  type: "sound" | "animal";
+};
+
 // モックデータ
 export const researchData: Research[] = [
   {
@@ -123,6 +129,83 @@ export const researchData: Research[] = [
         url: "test10",
       },
     ],
+  },
+  {
+    id: "fourth-step",
+    title: "7月18日ミーティング後開発物",
+    description:
+      "手と全体の2パターンで進める。動作データの保存、音の選択、背景の変更機能を実装予定。",
+    longDescription:
+      "本ステップでは、動作データの保存、音の選択、背景の変更機能を開発します。",
+    imageUrl:
+      "https://placehold.co/600x400/1a1a2e/e0e0e0?text=Recognition+and+Effects",
+    publications: [
+      {
+        id: 1,
+        title: "test11: 音声変更機能の追加",
+        journal: "test11に音声変更機能を追加。",
+        year: 2025,
+        url: "test11",
+      },
+    ],
+  },
+];
+
+export const Sounds: SoundList[] = [
+  {
+    name: "ぷよんっ",
+    dir: "/sounds/puyon",
+    type: "sound",
+  },
+  {
+    name: "イヌ",
+    dir: "/sounds/animal/inu",
+    type: "animal",
+  },
+  {
+    name: "ネコ",
+    dir: "/sounds/animal/neko",
+    type: "animal",
+  },
+  {
+    name: "カラス",
+    dir: "/sounds/animal/karasu",
+    type: "animal",
+  },
+  {
+    name: "ニワトリ",
+    dir: "/sounds/animal/niwatori",
+    type: "animal",
+  },
+  {
+    name: "ライオン",
+    dir: "/sounds/animal/raionn",
+    type: "animal",
+  },
+  {
+    name: "ウグイス",
+    dir: "/sounds/animal/uguisu",
+    type: "animal",
+  },
+  {
+    name: "ウマ",
+    dir: "/sounds/animal/uma",
+    type: "animal",
+  },
+  {
+    name: "ウシ",
+    dir: "/sounds/animal/usi",
+    type: "animal",
+  },
+  {
+    name: "ヤギ",
+    dir: "/sounds/animal/yagi",
+    type: "animal",
+  },
+  {
+    name: "ゾウ",
+    dir: "/sounds/animal/zou",
+    type: "animal",
   },
 ];
 
