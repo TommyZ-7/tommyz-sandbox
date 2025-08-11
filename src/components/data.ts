@@ -137,8 +137,7 @@ export const researchData: Research[] = [
       "手と全体の2パターンで進める。動作データの保存、音の選択、背景の変更機能を実装予定。",
     longDescription:
       "本ステップでは、動作データの保存、音の選択、背景の変更機能を開発します。",
-    imageUrl:
-      "https://placehold.co/600x400/1a1a2e/e0e0e0?text=Recognition+and+Effects",
+    imageUrl: "https://placehold.co/600x400/1a1a2e/e0e0e0?text=7/18_meeting",
     publications: [
       {
         id: 1,
