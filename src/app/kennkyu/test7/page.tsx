@@ -734,110 +734,57 @@ const PoseDetector = (): JSX.Element => {
         }
       >
         {/* メイン映像（全身ポーズ検出） */}
-        {(fullscreenMode === "none" || fullscreenMode === "pose") && (
-          <div
-            className={`relative ${
-              fullscreenMode === "pose" ? "w-full h-full" : ""
-            }`}
-          >
-            {fullscreenMode === "none" && (
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold text-gray-700">
-                  全身ポーズ検出
-                </h3>
-                <button
-                  onClick={() => toggleFullscreen("pose")}
-                  className="px-3 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md transition duration-300"
-                >
-                  フルスクリーン
-                </button>
-              </div>
-            )}
-            <div
-              className={`relative border-2 border-gray-300 rounded-lg overflow-hidden ${
-                fullscreenMode === "pose" ? "w-full h-full" : ""
-              }`}
-            >
-              <video
-                ref={videoRef}
-                className={`object-cover ${
-                  fullscreenMode === "pose" ? "w-full h-full" : "w-full h-full"
-                }`}
-                style={{ transform: "scaleX(-1)" }}
-                playsInline
-              />
-              <canvas
-                ref={canvasRef}
-                className="absolute top-0 left-0 w-full h-full"
-                style={{ transform: "scaleX(-1)" }}
-              />
-              {fullscreenMode === "pose" && (
-                <button
-                  onClick={() => toggleFullscreen("none")}
-                  className="absolute top-4 right-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition duration-300 z-10"
-                >
-                  終了 (ESC)
-                </button>
-              )}
-            </div>
+        <div className={`relative`}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-gray-700">
+              全身ポーズ検出
+            </h3>
           </div>
-        )}
+
+          <div
+            className={`relative border-2 border-gray-300 rounded-lg overflow-hidden`}
+          >
+            <video
+              ref={videoRef}
+              className={`object-cover ${
+                fullscreenMode === "pose" ? "w-full h-full" : "w-full h-full"
+              }`}
+              style={{ transform: "scaleX(-1)" }}
+              playsInline
+            />
+            <canvas
+              ref={canvasRef}
+              className="absolute top-0 left-0 w-full h-full"
+              style={{ transform: "scaleX(-1)" }}
+            />
+          </div>
+        </div>
 
         {/* 手の位置専用表示 */}
-        {(fullscreenMode === "none" || fullscreenMode === "hand") && (
-          <div
-            className={`relative ${
-              fullscreenMode === "hand" ? "w-full h-full" : ""
-            }`}
-          >
-            {fullscreenMode === "none" && (
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-lg font-semibold text-gray-700">
-                  手の位置
-                </h3>
-                <button
-                  onClick={() => toggleFullscreen("hand")}
-                  className="px-3 py-1 bg-green-500 hover:bg-green-600 text-white text-sm rounded-md transition duration-300"
-                >
-                  フルスクリーン
-                </button>
-              </div>
-            )}
-            <div
-              className={`border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-800 ${
-                fullscreenMode === "hand" ? "w-full h-full" : ""
-              }`}
-            >
-              <canvas
-                ref={handCanvasRef}
-                className={`object-cover ${
-                  fullscreenMode === "hand" ? "w-full h-full" : "w-full h-full"
-                }`}
-                style={{ transform: "scaleX(-1)" }}
-              />
-              {fullscreenMode === "hand" && (
-                <button
-                  onClick={() => toggleFullscreen("none")}
-                  className="absolute top-4 right-4 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md transition duration-300 z-10"
-                >
-                  終了 (ESC)
-                </button>
-              )}
-            </div>
-            {fullscreenMode === "none" && (
-              <div className="mt-2 flex justify-center space-x-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-red-400 rounded-full"></div>
-                  <span>左手 (L)</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-4 h-4 bg-teal-400 rounded-full"></div>
-                  <span>右手 (R)</span>
-                </div>
-              </div>
-            )}
+        <div className={`relative`}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-semibold text-gray-700">手の位置</h3>
           </div>
-        )}
+          <div
+            className={`border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-800`}
+          >
+            <canvas
+              ref={handCanvasRef}
+              className={`object-cover`}
+              style={{ transform: "scaleX(-1)" }}
+            />
+          </div>
+          <div className="mt-2 flex justify-center space-x-4 text-sm">
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-red-400 rounded-full"></div>
+              <span>左手 (L)</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <div className="w-4 h-4 bg-teal-400 rounded-full"></div>
+              <span>右手 (R)</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

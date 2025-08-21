@@ -43,6 +43,32 @@ export default function Home() {
             テスト7: テスト6から手の位置のみをキャンバスに描画するようにしたやつ
           </Link>
         </div>
+        <h1 className="text-3xl font-bold text-center sm:text-left">
+          認識範囲指定やエフェクトの実装テスト
+        </h1>
+        <p className="text-lg text-gray-700 text-center sm:text-left">
+          手の検出や体の検出において、認識範囲の指定やエフェクトの実装を行うテストです。
+        </p>
+        <div className="flex flex-col gap-4">
+          <Link href="/kennkyu/test8" className="text-blue-600 hover:underline">
+            テスト8: 手の認識範囲を指定できるようにしたやつ
+          </Link>
+          <Link href="/kennkyu/test9" className="text-blue-600 hover:underline">
+            テスト9: テスト8に光がほとばしるようなエフェクトを追加したやつ
+          </Link>
+          <Link
+            href="/kennkyu/test10"
+            className="text-blue-600 hover:underline"
+          >
+            テスト10: テスト9に音声を追加したやつ
+          </Link>
+        </div>
+        <h1 className="text-3xl font-bold text-center sm:text-left">
+          7月18日ミーティング後開発物
+        </h1>
+        <p className="text-lg text-gray-700 text-center sm:text-left">
+          手と全体の2パターンで進める。動作データの保存、音の選択、背景の変更機能を実装予定。
+        </p>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>
