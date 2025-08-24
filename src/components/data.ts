@@ -21,6 +21,11 @@ export type SoundList = {
   type: "sound" | "animal";
 };
 
+export interface BackgroundImage {
+  name: string; // ドロップダウンに表示される名前
+  path: string; // publicフォルダからのパス
+}
+
 // モックデータ
 export const researchData: Research[] = [
   {
@@ -142,9 +147,16 @@ export const researchData: Research[] = [
       {
         id: 1,
         title: "test11: 音声変更機能の追加",
-        journal: "test11に音声変更機能を追加。",
+        journal: "test10に音声変更機能を追加。",
         year: 2025,
         url: "test11",
+      },
+      {
+        id: 2,
+        title: "test12: 背景変更機能の追加",
+        journal: "test11に背景変更機能を追加。",
+        year: 2025,
+        url: "test12",
       },
     ],
   },
@@ -206,6 +218,14 @@ export const Sounds: SoundList[] = [
     dir: "/sounds/animal/zou",
     type: "animal",
   },
+];
+
+export const BackgroundImages: BackgroundImage[] = [
+  { name: "なし (単色)", path: "" },
+  { name: "宇宙", path: "/images/space.jpg" },
+  { name: "サイバー", path: "/images/cyber.jpg" },
+  { name: "森", path: "/images/forest.jpg" },
+  { name: "ネオン", path: "/images/neon.webp" },
 ];
 
 // アニメーション設定
