@@ -439,6 +439,7 @@ const PoseDetector = (): JSX.Element => {
               : modelType === "Thunder"
               ? poseDetectionModule.movenet.modelType.SINGLEPOSE_THUNDER
               : poseDetectionModule.movenet.modelType.MULTIPOSE_LIGHTNING,
+          enableTracking: true,
         };
 
         // 骨格の接続情報をRefに保存
