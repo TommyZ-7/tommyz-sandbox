@@ -69,6 +69,14 @@ export default function Home() {
         <p className="text-lg text-gray-700 text-center sm:text-left">
           手と全体の2パターンで進める。動作データの保存、音の選択、背景の変更機能を実装予定。
         </p>
+        <div className="flex flex-col gap-4">
+          <Link href="/kennkyu/test8" className="text-blue-600 hover:underline">
+            テスト11: 音声を変更できるようにしたやつ
+          </Link>
+          <Link href="/kennkyu/test9" className="text-blue-600 hover:underline">
+            テスト12: 背景を変更できるようにしたやつ
+          </Link>
+        </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>
