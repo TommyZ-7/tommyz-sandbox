@@ -76,6 +76,18 @@ export default function Home() {
           <Link href="/kennkyu/test9" className="text-blue-600 hover:underline">
             テスト12: 背景を変更できるようにしたやつ
           </Link>
+          <Link
+            href="/kennkyu/test10"
+            className="text-blue-600 hover:underline"
+          >
+            テスト13: 動作データを保存できるようにしたやつ
+          </Link>
+          <Link
+            href="/kennkyu/dataViewer"
+            className="text-blue-600 hover:underline"
+          >
+            その他: 動作データを可視化するやつ
+          </Link>
         </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>

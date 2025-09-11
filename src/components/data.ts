@@ -158,6 +158,20 @@ export const researchData: Research[] = [
         year: 2025,
         url: "test12",
       },
+      {
+        id: 3,
+        title: "test13: 動作データ保存機能の追加",
+        journal: "動作データを保存する機能を追加。",
+        year: 2025,
+        url: "test13",
+      },
+      {
+        id: 4,
+        title: "other: 動作データのビューワーの実装",
+        journal: "保存した動作データを表示するビューワーを実装。",
+        year: 2025,
+        url: "dataViewer",
+      }
     ],
   },
 ];
