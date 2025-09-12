@@ -122,11 +122,11 @@ export default function App() {
   const lastVideoTimeRef = useRef<number>(-1);
   const particlesRef = useRef<Particle[]>([]);
   const lastHandPositionsRef = useRef<{
-    left: Point | null;
-    right: Point | null;
+    left: { [fingertipIndex: number]: Point | null };
+    right: { [fingertipIndex: number]: Point | null };
   }>({
-    left: null,
-    right: null,
+    left: { 4: null, 8: null, 12: null, 16: null, 20: null },
+    right: { 4: null, 8: null, 12: null, 16: null, 20: null },
   });
 
   // State

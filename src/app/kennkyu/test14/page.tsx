@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import App from "@/components/test14/app";
 
