@@ -182,7 +182,7 @@ export const drawCanvas = (
 
       // 指先のインデックス（親指、人差し指、中指、薬指、小指）
       const fingertipIndices = [4, 8, 12, 16, 20];
-      
+
       // 各指先の座標を取得してエフェクトを生成
       for (const fingertipIndex of fingertipIndices) {
         const fingertip = landmarks[fingertipIndex];
@@ -197,7 +197,8 @@ export const drawCanvas = (
             const lastPos = lastHandPositionsRef.current.left[fingertipIndex];
             if (lastPos) {
               const distance = Math.sqrt(
-                (fingertipPoint.x - lastPos.x) ** 2 + (fingertipPoint.y - lastPos.y) ** 2
+                (fingertipPoint.x - lastPos.x) ** 2 +
+                  (fingertipPoint.y - lastPos.y) ** 2
               );
               if (distance > 5) {
                 emitParticles(fingertipPoint.x, fingertipPoint.y);
@@ -209,7 +210,8 @@ export const drawCanvas = (
             const lastPos = lastHandPositionsRef.current.right[fingertipIndex];
             if (lastPos) {
               const distance = Math.sqrt(
-                (fingertipPoint.x - lastPos.x) ** 2 + (fingertipPoint.y - lastPos.y) ** 2
+                (fingertipPoint.x - lastPos.x) ** 2 +
+                  (fingertipPoint.y - lastPos.y) ** 2
               );
               if (distance > 5) {
                 emitParticles(fingertipPoint.x, fingertipPoint.y);
@@ -224,9 +226,21 @@ export const drawCanvas = (
 
   // 手が範囲外に出たら、最後の位置をリセット
   if (!isLeftHandVisible) {
-    lastHandPositionsRef.current.left = { 4: null, 8: null, 12: null, 16: null, 20: null };
+    lastHandPositionsRef.current.left = {
+      4: null,
+      8: null,
+      12: null,
+      16: null,
+      20: null,
+    };
   }
   if (!isRightHandVisible) {
-    lastHandPositionsRef.current.right = { 4: null, 8: null, 12: null, 16: null, 20: null };
+    lastHandPositionsRef.current.right = {
+      4: null,
+      8: null,
+      12: null,
+      16: null,
+      20: null,
+    };
   }
 };
