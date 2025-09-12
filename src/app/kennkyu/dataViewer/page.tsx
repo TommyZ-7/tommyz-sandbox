@@ -17,7 +17,26 @@ interface PoseData {
   }>;
 }
 
-// 動きの強度計算
+// 手のランドマークデータの型定義
+interface HandData {
+  startTime: number;
+  memo?: string;
+  hands: Array<{
+    timestamp: number;
+    landmarks: Array<{
+      x: number;
+      y: number;
+      z: number;
+      handedness: string;
+      index: number;
+    }>;
+  }>;
+}
+
+// 統合されたデータ型
+type DetectionData = PoseData | HandData;
+
+// 動きの強度計算（ポーズデータ用）
 const calculateMovementIntensity = (
   currentPose: PoseData["poses"][0],
   previousPose: PoseData["poses"][0] | null
@@ -40,6 +59,50 @@ const calculateMovementIntensity = (
   });
 
   return validPoints > 0 ? totalMovement / validPoints : 0;
+};
+
+// 動きの強度計算（手のデータ用）
+const calculateHandMovementIntensity = (
+  currentHand: HandData["hands"][0],
+  previousHand: HandData["hands"][0] | null
+): number => {
+  if (!previousHand) return 0;
+
+  let totalMovement = 0;
+  let validPoints = 0;
+
+  // 手首（インデックス0）と指先のランドマークを重視
+  const importantLandmarks = [0, 4, 8, 12, 16, 20]; // 手首と各指の先端
+
+  currentHand.landmarks.forEach((currentLm) => {
+    const prevLm = previousHand.landmarks.find(
+      (p) =>
+        p.index === currentLm.index && p.handedness === currentLm.handedness
+    );
+    if (prevLm) {
+      const distance = Math.sqrt(
+        Math.pow(currentLm.x - prevLm.x, 2) +
+          Math.pow(currentLm.y - prevLm.y, 2) +
+          Math.pow(currentLm.z - prevLm.z, 2) * 0.5 // Z軸の重みを軽くする
+      );
+
+      // 重要なランドマークの動きを重視
+      const weight = importantLandmarks.includes(currentLm.index) ? 2 : 1;
+      totalMovement += distance * weight;
+      validPoints += weight;
+    }
+  });
+
+  return validPoints > 0 ? totalMovement / validPoints : 0;
+};
+
+// データタイプの判定
+const isHandData = (data: DetectionData): data is HandData => {
+  return "hands" in data;
+};
+
+const isPoseData = (data: DetectionData): data is PoseData => {
+  return "poses" in data;
 };
 
 // 色の計算（動きの強度に応じて青→緑→黄→赤）
@@ -73,7 +136,9 @@ const getIntensityColor = (intensity: number, maxIntensity: number): string => {
 };
 
 const DataViewer = (): JSX.Element => {
-  const [poseData, setPoseData] = useState<PoseData | null>(null);
+  const [detectionData, setDetectionData] = useState<DetectionData | null>(
+    null
+  );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,8 +151,8 @@ const DataViewer = (): JSX.Element => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string) as PoseData;
-        setPoseData(data);
+        const data = JSON.parse(e.target?.result as string) as DetectionData;
+        setDetectionData(data);
       } catch (error) {
         alert("JSONファイルの読み込みに失敗しました。");
         console.error("JSON parse error:", error);
@@ -97,14 +162,26 @@ const DataViewer = (): JSX.Element => {
   };
 
   // タイムライン用のデータ処理
-  const processTimelineData = (data: PoseData) => {
+  const processTimelineData = (data: DetectionData) => {
     const intensities: number[] = [];
 
-    for (let i = 0; i < data.poses.length; i++) {
-      const currentPose = data.poses[i];
-      const previousPose = i > 0 ? data.poses[i - 1] : null;
-      const intensity = calculateMovementIntensity(currentPose, previousPose);
-      intensities.push(intensity);
+    if (isPoseData(data)) {
+      for (let i = 0; i < data.poses.length; i++) {
+        const currentPose = data.poses[i];
+        const previousPose = i > 0 ? data.poses[i - 1] : null;
+        const intensity = calculateMovementIntensity(currentPose, previousPose);
+        intensities.push(intensity);
+      }
+    } else if (isHandData(data)) {
+      for (let i = 0; i < data.hands.length; i++) {
+        const currentHand = data.hands[i];
+        const previousHand = i > 0 ? data.hands[i - 1] : null;
+        const intensity = calculateHandMovementIntensity(
+          currentHand,
+          previousHand
+        );
+        intensities.push(intensity);
+      }
     }
 
     const maxIntensity = Math.max(...intensities);
@@ -112,19 +189,37 @@ const DataViewer = (): JSX.Element => {
   };
 
   // データの統計情報
-  const getDataStats = (data: PoseData) => {
-    const duration =
-      data.poses.length > 0
-        ? data.poses[data.poses.length - 1].timestamp / 1000
-        : 0;
+  const getDataStats = (data: DetectionData) => {
+    let duration = 0;
+    let totalCount = 0;
+    let dataType = "";
+
+    if (isPoseData(data)) {
+      duration =
+        data.poses.length > 0
+          ? data.poses[data.poses.length - 1].timestamp / 1000
+          : 0;
+      totalCount = data.poses.length;
+      dataType = "ポーズ";
+    } else if (isHandData(data)) {
+      duration =
+        data.hands.length > 0
+          ? data.hands[data.hands.length - 1].timestamp / 1000
+          : 0;
+      totalCount = data.hands.length;
+      dataType = "手";
+    }
 
     const { intensities } = processTimelineData(data);
     const avgIntensity =
-      intensities.reduce((sum, val) => sum + val, 0) / intensities.length;
-    const maxIntensity = Math.max(...intensities);
+      intensities.length > 0
+        ? intensities.reduce((sum, val) => sum + val, 0) / intensities.length
+        : 0;
+    const maxIntensity = intensities.length > 0 ? Math.max(...intensities) : 0;
 
     return {
-      totalPoses: data.poses.length,
+      totalCount,
+      dataType,
       duration: duration.toFixed(1),
       avgIntensity: avgIntensity.toFixed(2),
       maxIntensity: maxIntensity.toFixed(2),
@@ -137,7 +232,7 @@ const DataViewer = (): JSX.Element => {
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">
-          ポーズデータビューアー
+          データビューアー
         </h1>
 
         {/* ファイルアップロードエリア */}
@@ -168,10 +263,10 @@ const DataViewer = (): JSX.Element => {
         </div>
 
         {/* データが読み込まれた場合の表示 */}
-        {poseData && (
+        {detectionData && (
           <>
             {/* メモ表示 */}
-            {poseData.memo && (
+            {detectionData.memo && (
               <div className="bg-blue-50 rounded-lg shadow-md p-6 mb-6 border-l-4 border-blue-500">
                 <h2 className="text-xl font-semibold text-blue-800 mb-3 flex items-center">
                   <svg
@@ -191,7 +286,7 @@ const DataViewer = (): JSX.Element => {
                 </h2>
                 <div className="bg-white rounded-md p-4 shadow-sm">
                   <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                    {poseData.memo}
+                    {detectionData.memo}
                   </p>
                 </div>
               </div>
@@ -204,14 +299,16 @@ const DataViewer = (): JSX.Element => {
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 {(() => {
-                  const stats = getDataStats(poseData);
+                  const stats = getDataStats(detectionData);
                   return (
                     <>
                       <div className="text-center">
                         <div className="text-2xl font-bold text-blue-600">
-                          {stats.totalPoses}
+                          {stats.totalCount}
                         </div>
-                        <div className="text-sm text-gray-600">ポーズ数</div>
+                        <div className="text-sm text-gray-600">
+                          {stats.dataType}データ数
+                        </div>
                       </div>
                       <div className="text-center">
                         <div className="text-2xl font-bold text-green-600">
@@ -255,11 +352,22 @@ const DataViewer = (): JSX.Element => {
 
               {(() => {
                 const { intensities, maxIntensity } =
-                  processTimelineData(poseData);
-                const totalDuration =
-                  poseData.poses.length > 0
-                    ? poseData.poses[poseData.poses.length - 1].timestamp
-                    : 0;
+                  processTimelineData(detectionData);
+
+                let totalDuration = 0;
+                if (isPoseData(detectionData)) {
+                  totalDuration =
+                    detectionData.poses.length > 0
+                      ? detectionData.poses[detectionData.poses.length - 1]
+                          .timestamp
+                      : 0;
+                } else if (isHandData(detectionData)) {
+                  totalDuration =
+                    detectionData.hands.length > 0
+                      ? detectionData.hands[detectionData.hands.length - 1]
+                          .timestamp
+                      : 0;
+                }
 
                 return (
                   <div className="space-y-4">
@@ -272,6 +380,16 @@ const DataViewer = (): JSX.Element => {
                             maxIntensity
                           );
                           const width = 100 / intensities.length;
+
+                          let timestamp = 0;
+                          if (isPoseData(detectionData)) {
+                            timestamp =
+                              detectionData.poses[index]?.timestamp || 0;
+                          } else if (isHandData(detectionData)) {
+                            timestamp =
+                              detectionData.hands[index]?.timestamp || 0;
+                          }
+
                           return (
                             <div
                               key={index}
@@ -280,18 +398,13 @@ const DataViewer = (): JSX.Element => {
                                 backgroundColor: color,
                                 width: `${width}%`,
                               }}
-                              title={`時刻: ${(
-                                poseData.poses[index]?.timestamp / 1000
-                              ).toFixed(1)}s, 動き強度: ${intensity.toFixed(
-                                2
-                              )}`}
+                              title={`時刻: ${(timestamp / 1000).toFixed(
+                                1
+                              )}s, 動き強度: ${intensity.toFixed(2)}`}
                             >
                               {/* ホバー時の詳細情報 */}
                               <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
-                                {(
-                                  poseData.poses[index]?.timestamp / 1000
-                                ).toFixed(1)}
-                                s
+                                {(timestamp / 1000).toFixed(1)}s
                                 <br />
                                 強度: {intensity.toFixed(2)}
                               </div>
@@ -407,7 +520,7 @@ const DataViewer = (): JSX.Element => {
         )}
 
         {/* データが読み込まれていない場合の表示 */}
-        {!poseData && (
+        {!detectionData && (
           <div className="bg-white rounded-lg shadow-md p-12 text-center">
             <div className="text-gray-400 mb-4">
               <svg
