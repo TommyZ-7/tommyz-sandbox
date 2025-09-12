@@ -13,6 +13,7 @@ import {
 import { ResearchCard } from "../../components/ResearchCard";
 import { use } from "react";
 import { Header } from "../../components/header";
+import { FloatingLights } from "../../components/FloatingLights";
 
 export default function HomePage() {
   const latestResearch = researchData[researchData.length - 1];
@@ -23,6 +24,17 @@ export default function HomePage() {
 
   return (
     <>
+      <FloatingLights
+        count={35}
+        colors={[
+          "#06b6d4",
+          "#3b82f6",
+          "#8b5cf6",
+          "#10b981",
+          "#ffffff",
+          "#f59e0b",
+        ]}
+      />
       <Header />
       <section className="h-screen flex items-center justify-center text-center bg-gray-900 -mt-24">
         <div className="z-10 relative">
