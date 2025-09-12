@@ -94,6 +94,12 @@ export default function Home() {
           >
             その他: 動作データを可視化するやつ
           </Link>
+          <Link
+            href="/kennkyu/test14"
+            className="text-blue-600 hover:underline"
+          >
+            テスト14: test13の検出対象を手に変更
+          </Link>
         </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>

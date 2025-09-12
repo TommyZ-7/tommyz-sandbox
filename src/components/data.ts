@@ -171,7 +171,14 @@ export const researchData: Research[] = [
         journal: "保存した動作データを表示するビューワーを実装。",
         year: 2025,
         url: "dataViewer",
-      }
+      },
+      {
+        id: 5,
+        title: "test14: 手の検出に変更",
+        journal: "test13の検出対象を手に変更。",
+        year: 2025,
+        url: "test14",
+      },
     ],
   },
 ];
