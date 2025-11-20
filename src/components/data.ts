@@ -181,6 +181,31 @@ export const researchData: Research[] = [
       },
     ],
   },
+  {
+    id: "fifth-step",
+    title: "10月31日実地テスト後開発物",
+    description:
+      "キラキラした音やエフェクト、エフェクトサイズの動的変更、記録と映像の分離、明るさ問題、記録実装画面でショートカットキー設定などを実装する。",
+    longDescription:
+      "本ステップでは、キラキラした音やエフェクト、エフェクトサイズの動的変更、記録と映像の分離、明るさ問題、記録実装画面でショートカットキー設定などを実装する。",
+    imageUrl: "https://placehold.co/600x400/1a1a2e/e0e0e0?text=10/31_test",
+    publications: [
+      {
+        id: 1,
+        title: "test15: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（手）",
+        journal: "test14にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
+        year: 2025,
+        url: "test15",
+      },
+      {
+        id: 2,
+        title: "test16: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（全身）",
+        journal: "test13にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
+        year: 2025,
+        url: "test16",
+      },
+    ],
+  },
 ];
 
 export const Sounds: SoundList[] = [

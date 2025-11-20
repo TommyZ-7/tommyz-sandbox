@@ -101,6 +101,26 @@ export default function Home() {
             テスト14: test13の検出対象を手に変更
           </Link>
         </div>
+        <h1 className="text-3xl font-bold text-center sm:text-left">
+          7月18日ミーティング後開発物
+        </h1>
+        <p className="text-lg text-gray-700 text-center sm:text-left">
+          キラキラした音やエフェクト、エフェクトサイズの動的変更、記録と映像の分離、明るさ問題、記録実装画面でショートカットキー設定などを実装する
+        </p>
+        <div className="flex flex-col gap-4">
+          <Link
+            href="/kennkyu/test15"
+            className="text-blue-600 hover:underline"
+          >
+            テスト15: test14にエフェクト変更機能と動きの大小に応じたエフェクトサイズを変更する機能を追加
+          </Link>
+          <Link
+            href="/kennkyu/test16"
+            className="text-blue-600 hover:underline"
+          >
+            テスト16: test13にエフェクト変更機能と動きの大小に応じたエフェクトサイズを変更する機能を追加
+          </Link>
+        </div>
         <GitHubRepoCard owner="TommyZ-7" repo="tommyz-sandbox" />
       </main>
     </div>
