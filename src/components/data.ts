@@ -192,15 +192,19 @@ export const researchData: Research[] = [
     publications: [
       {
         id: 1,
-        title: "test15: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（手）",
-        journal: "test14にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
+        title:
+          "test15: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（手）",
+        journal:
+          "test14にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
         year: 2025,
         url: "test15",
       },
       {
         id: 2,
-        title: "test16: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（全身）",
-        journal: "test13にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
+        title:
+          "test16: エフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装（全身）",
+        journal:
+          "test13にエフェクト変更機能、動きに応じたエフェクトサイズの変更機能を実装。",
         year: 2025,
         url: "test16",
       },
@@ -212,6 +216,16 @@ export const Sounds: SoundList[] = [
   {
     name: "ぷよんっ",
     dir: "/sounds/puyon",
+    type: "sound",
+  },
+  {
+    name: "パフ",
+    dir: "/sounds/pahu",
+    type: "sound",
+  },
+  {
+    name: "キラキラ",
+    dir: "/sounds/kira",
     type: "sound",
   },
   {
