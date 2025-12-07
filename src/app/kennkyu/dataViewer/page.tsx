@@ -36,12 +36,37 @@ interface HandData {
 // 統合されたデータ型
 type DetectionData = PoseData | HandData;
 
+// キーポイント名マッピング（ポーズ）
+const POSE_KEYPOINT_NAMES = [
+  "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+  "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+  "left_wrist", "right_wrist", "left_hip", "right_hip",
+  "left_knee", "right_knee", "left_ankle", "right_ankle"
+];
+
+// ランドマーク名マッピング（手）
+const HAND_LANDMARK_NAMES = [
+  "wrist", "thumb_cmc", "thumb_mcp", "thumb_ip", "thumb_tip",
+  "index_mcp", "index_pip", "index_dip", "index_tip",
+  "middle_mcp", "middle_pip", "middle_dip", "middle_tip",
+  "ring_mcp", "ring_pip", "ring_dip", "ring_tip",
+  "pinky_mcp", "pinky_pip", "pinky_dip", "pinky_tip"
+];
+
+// 色のパレット
+const COLOR_PALETTE = [
+  "#ef4444", "#f97316", "#f59e0b", "#84cc16", "#10b981",
+  "#06b6d4", "#3b82f6", "#6366f1", "#8b5cf6", "#d946ef",
+  "#f43f5e", "#db2777"
+];
+
 // 動きの強度計算（ポーズデータ用）
-const calculateMovementIntensity = (
+const calculateMovementIntensities = (
   currentPose: PoseData["poses"][0],
   previousPose: PoseData["poses"][0] | null
-): number => {
-  if (!previousPose) return 0;
+): { average: number; byMarker: number[] } => {
+  const byMarker = new Array(17).fill(0);
+  if (!previousPose) return { average: 0, byMarker };
 
   let totalMovement = 0;
   let validPoints = 0;
@@ -51,22 +76,27 @@ const calculateMovementIntensity = (
     if (currentKp && prevKp && currentKp.score > 0.5 && prevKp.score > 0.5) {
       const distance = Math.sqrt(
         Math.pow(currentKp.x - prevKp.x, 2) +
-          Math.pow(currentKp.y - prevKp.y, 2)
+        Math.pow(currentKp.y - prevKp.y, 2)
       );
+      byMarker[index] = distance;
       totalMovement += distance;
       validPoints++;
     }
   });
 
-  return validPoints > 0 ? totalMovement / validPoints : 0;
+  return {
+    average: validPoints > 0 ? totalMovement / validPoints : 0,
+    byMarker
+  };
 };
 
 // 動きの強度計算（手のデータ用）
-const calculateHandMovementIntensity = (
+const calculateHandMovementIntensities = (
   currentHand: HandData["hands"][0],
   previousHand: HandData["hands"][0] | null
-): number => {
-  if (!previousHand) return 0;
+): { average: number; byMarker: number[] } => {
+  const byMarker = new Array(21).fill(0);
+  if (!previousHand) return { average: 0, byMarker };
 
   let totalMovement = 0;
   let validPoints = 0;
@@ -82,9 +112,10 @@ const calculateHandMovementIntensity = (
     if (prevLm) {
       const distance = Math.sqrt(
         Math.pow(currentLm.x - prevLm.x, 2) +
-          Math.pow(currentLm.y - prevLm.y, 2) +
-          Math.pow(currentLm.z - prevLm.z, 2) * 0.5 // Z軸の重みを軽くする
+        Math.pow(currentLm.y - prevLm.y, 2) +
+        Math.pow(currentLm.z - prevLm.z, 2) * 0.5 // Z軸の重みを軽くする
       );
+      byMarker[currentLm.index] = distance;
 
       // 重要なランドマークの動きを重視
       const weight = importantLandmarks.includes(currentLm.index) ? 2 : 1;
@@ -93,7 +124,10 @@ const calculateHandMovementIntensity = (
     }
   });
 
-  return validPoints > 0 ? totalMovement / validPoints : 0;
+  return {
+    average: validPoints > 0 ? totalMovement / validPoints : 0,
+    byMarker
+  };
 };
 
 // データタイプの判定
@@ -140,6 +174,7 @@ const DataViewer = (): JSX.Element => {
     null
   );
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedMarkers, setSelectedMarkers] = useState<number[]>([]); // 選択されたマーカーのインデックス
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ファイル読み込み
@@ -153,6 +188,7 @@ const DataViewer = (): JSX.Element => {
       try {
         const data = JSON.parse(e.target?.result as string) as DetectionData;
         setDetectionData(data);
+        setSelectedMarkers([]); // リセット
       } catch (error) {
         alert("JSONファイルの読み込みに失敗しました。");
         console.error("JSON parse error:", error);
@@ -163,29 +199,43 @@ const DataViewer = (): JSX.Element => {
 
   // タイムライン用のデータ処理
   const processTimelineData = (data: DetectionData) => {
-    const intensities: number[] = [];
+    const intensities: number[] = []; // 平均
+    const markerIntensities: number[][] = []; // 各マーカーごとの時系列データ [markerIndex][timeIndex]
+
+    // 初期化
+    const markerCount = isPoseData(data) ? 17 : 21;
+    for (let i = 0; i < markerCount; i++) markerIntensities[i] = [];
 
     if (isPoseData(data)) {
       for (let i = 0; i < data.poses.length; i++) {
         const currentPose = data.poses[i];
         const previousPose = i > 0 ? data.poses[i - 1] : null;
-        const intensity = calculateMovementIntensity(currentPose, previousPose);
-        intensities.push(intensity);
+        const { average, byMarker } = calculateMovementIntensities(currentPose, previousPose);
+        intensities.push(average);
+        byMarker.forEach((val, idx) => markerIntensities[idx].push(val));
       }
     } else if (isHandData(data)) {
       for (let i = 0; i < data.hands.length; i++) {
         const currentHand = data.hands[i];
         const previousHand = i > 0 ? data.hands[i - 1] : null;
-        const intensity = calculateHandMovementIntensity(
+        const { average, byMarker } = calculateHandMovementIntensities(
           currentHand,
           previousHand
         );
-        intensities.push(intensity);
+        intensities.push(average);
+        byMarker.forEach((val, idx) => markerIntensities[idx].push(val));
       }
     }
 
-    const maxIntensity = Math.max(...intensities);
-    return { intensities, maxIntensity };
+    // 最大値を計算（グラフのスケール用）
+    // 平均と、選択されているマーカーの最大値を考慮
+    let maxVal = Math.max(...intensities, 0.1);
+    selectedMarkers.forEach(markerIdx => {
+      const mMax = Math.max(...markerIntensities[markerIdx]);
+      if (mMax > maxVal) maxVal = mMax;
+    });
+
+    return { intensities, markerIntensities, maxIntensity: maxVal };
   };
 
   // データの統計情報
@@ -226,6 +276,20 @@ const DataViewer = (): JSX.Element => {
       startTime: new Date(data.startTime).toLocaleString("ja-JP"),
       hasMemo: !!data.memo,
     };
+  };
+
+  const getMarkerName = (idx: number, isPose: boolean) => {
+    return isPose ? POSE_KEYPOINT_NAMES[idx] || `Point ${idx}` : HAND_LANDMARK_NAMES[idx] || `Landmark ${idx}`;
+  };
+
+  const toggleMarkerSelection = (idx: number) => {
+    setSelectedMarkers(prev => {
+      if (prev.includes(idx)) {
+        return prev.filter(i => i !== idx);
+      } else {
+        return [...prev, idx];
+      }
+    });
   };
 
   return (
@@ -340,6 +404,37 @@ const DataViewer = (): JSX.Element => {
               </div>
             </div>
 
+            {/* マーカー選択 */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-700 mb-4">
+                グラフ表示マーカー選択
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const isPose = isPoseData(detectionData);
+                  const count = isPose ? 17 : 21;
+                  return Array.from({ length: count }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => toggleMarkerSelection(i)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${selectedMarkers.includes(i)
+                          ? "bg-blue-100 border-blue-500 text-blue-700"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        }`}
+                      style={{
+                        borderColor: selectedMarkers.includes(i) ? COLOR_PALETTE[i % COLOR_PALETTE.length] : undefined,
+                        color: selectedMarkers.includes(i) ? COLOR_PALETTE[i % COLOR_PALETTE.length] : undefined,
+                        backgroundColor: selectedMarkers.includes(i) ? `${COLOR_PALETTE[i % COLOR_PALETTE.length]}20` : undefined // 12% opacity
+                      }}
+                    >
+                      {getMarkerName(i, isPose)}
+                    </button>
+                  ))
+                })()}
+              </div>
+            </div>
+
+
             {/* タイムライン表示 */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h2 className="text-xl font-semibold text-gray-700 mb-4">
@@ -351,7 +446,7 @@ const DataViewer = (): JSX.Element => {
               </p>
 
               {(() => {
-                const { intensities, maxIntensity } =
+                const { intensities, markerIntensities, maxIntensity } =
                   processTimelineData(detectionData);
 
                 let totalDuration = 0;
@@ -359,19 +454,19 @@ const DataViewer = (): JSX.Element => {
                   totalDuration =
                     detectionData.poses.length > 0
                       ? detectionData.poses[detectionData.poses.length - 1]
-                          .timestamp
+                        .timestamp
                       : 0;
                 } else if (isHandData(detectionData)) {
                   totalDuration =
                     detectionData.hands.length > 0
                       ? detectionData.hands[detectionData.hands.length - 1]
-                          .timestamp
+                        .timestamp
                       : 0;
                 }
 
                 return (
                   <div className="space-y-4">
-                    {/* タイムラインバー */}
+                    {/* タイムラインバー (平均値) */}
                     <div className="relative">
                       <div className="h-12 bg-gray-200 rounded-lg overflow-hidden flex">
                         {intensities.map((intensity, index) => {
@@ -400,13 +495,13 @@ const DataViewer = (): JSX.Element => {
                               }}
                               title={`時刻: ${(timestamp / 1000).toFixed(
                                 1
-                              )}s, 動き強度: ${intensity.toFixed(2)}`}
+                              )}s, 平均強度: ${intensity.toFixed(2)}`}
                             >
                               {/* ホバー時の詳細情報 */}
-                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-black text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
                                 {(timestamp / 1000).toFixed(1)}s
                                 <br />
-                                強度: {intensity.toFixed(2)}
+                                平均強度: {intensity.toFixed(2)}
                               </div>
                             </div>
                           );
@@ -421,7 +516,7 @@ const DataViewer = (): JSX.Element => {
                     </div>
 
                     {/* 凡例 */}
-                    <div className="flex items-center justify-center space-x-6 text-sm">
+                    <div className="flex items-center justify-center space-x-6 text-sm text-gray-600">
                       <div className="flex items-center space-x-2">
                         <div className="w-4 h-4 bg-blue-500 rounded"></div>
                         <span>静止</span>
@@ -451,6 +546,7 @@ const DataViewer = (): JSX.Element => {
                           height="100%"
                           viewBox="0 0 800 200"
                           className="absolute top-0 left-0"
+                          preserveAspectRatio="none"
                         >
                           {/* グリッドライン */}
                           {[0, 50, 100, 150, 200].map((y) => (
@@ -465,11 +561,12 @@ const DataViewer = (): JSX.Element => {
                             />
                           ))}
 
-                          {/* データライン */}
+                          {/* 平均データライン (常に表示、薄く) */}
                           <polyline
                             fill="none"
-                            stroke="#3b82f6"
+                            stroke="#9CA3AF"
                             strokeWidth="2"
+                            strokeDasharray="4 4"
                             points={intensities
                               .map((intensity, index) => {
                                 const x =
@@ -481,25 +578,23 @@ const DataViewer = (): JSX.Element => {
                               .join(" ")}
                           />
 
-                          {/* データポイント */}
-                          {intensities.map((intensity, index) => {
-                            const x = (index / (intensities.length - 1)) * 800;
-                            const y = 200 - (intensity / maxIntensity) * 180;
-                            const color = getIntensityColor(
-                              intensity,
-                              maxIntensity
-                            );
+                          {/* 選択されたマーカーのライン */}
+                          {selectedMarkers.map(markerIdx => {
+                            const mIntensities = markerIntensities[markerIdx];
+                            const color = COLOR_PALETTE[markerIdx % COLOR_PALETTE.length];
                             return (
-                              <circle
-                                key={index}
-                                cx={x}
-                                cy={y}
-                                r="3"
-                                fill={color}
-                                stroke="white"
-                                strokeWidth="1"
+                              <polyline
+                                key={markerIdx}
+                                fill="none"
+                                stroke={color}
+                                strokeWidth="2"
+                                points={mIntensities.map((val, index) => {
+                                  const x = (index / (intensities.length - 1)) * 800;
+                                  const y = 200 - (val / maxIntensity) * 180;
+                                  return `${x},${y}`;
+                                }).join(" ")}
                               />
-                            );
+                            )
                           })}
                         </svg>
 
@@ -509,6 +604,20 @@ const DataViewer = (): JSX.Element => {
                         </div>
                         <div className="absolute left-2 bottom-2 text-xs text-gray-600">
                           0
+                        </div>
+
+                        {/* 凡例 (グラフ内) */}
+                        <div className="absolute top-2 right-2 bg-white/80 p-2 rounded text-xs space-y-1 text-gray-600">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-0.5 bg-gray-400 border-dashed border-t border-gray-400"></div>
+                            <span>平均</span>
+                          </div>
+                          {selectedMarkers.map(markerIdx => (
+                            <div key={markerIdx} className="flex items-center space-x-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_PALETTE[markerIdx % COLOR_PALETTE.length] }}></div>
+                              <span>{getMarkerName(markerIdx, isPoseData(detectionData))}</span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     </div>

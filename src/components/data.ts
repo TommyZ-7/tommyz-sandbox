@@ -229,6 +229,11 @@ export const Sounds: SoundList[] = [
     type: "sound",
   },
   {
+    name: "キラキラ2",
+    dir: "/sounds/button",
+    type: "sound",
+  },
+  {
     name: "イヌ",
     dir: "/sounds/animal/inu",
     type: "animal",
