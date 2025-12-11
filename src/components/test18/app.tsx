@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Sounds, SoundList, BackgroundImages } from "@/components/data";
 import type * as poseDetection from "@tensorflow-models/pose-detection";
 import type * as tf from "@tensorflow/tfjs";
-import { EffectType, Particle, NormalParticle, SparkleParticle, FireParticle, BubbleParticle, SnowParticle, HolidayColorsParticle, ComplexSnowflakeParticle, GiftBoxParticle } from "../shared/effects";
+import { EffectType, Particle, NormalParticle, SparkleParticle, FireParticle, BubbleParticle, SnowParticle, HolidayColorsParticle, ComplexSnowflakeParticle, GiftBoxParticle } from "../effects/effects";
 
 // モデルタイプを型として定義
 type ModelType = "Lightning" | "Thunder" | "multiPose";
