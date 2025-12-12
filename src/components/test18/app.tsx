@@ -87,6 +87,8 @@ const PoseDetector = (): JSX.Element => {
 
     // エフェクト選択用のState
     const [selectedEffect, setSelectedEffect] = useState<EffectType>("Normal");
+    const [moveThreshold, setMoveThreshold] = useState<number>(5);
+    const [effectCount, setEffectCount] = useState<number>(10);
 
     // データ記録機能用のState
     const [isRecording, setIsRecording] = useState(false);
@@ -127,6 +129,52 @@ const PoseDetector = (): JSX.Element => {
 
     // 音声再生用のRef
     const audioRef = useRef<HTMLAudioElement | null>(null);
+
+    // --- State for interactive quadrilateral ---
+    const [quadPoints, setQuadPoints] = useState<Point[]>([
+        { x: 320, y: 180 },
+        { x: 960, y: 180 },
+        { x: 960, y: 540 },
+        { x: 320, y: 540 },
+    ]);
+    const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(
+        null
+    );
+    const DRAG_HANDLE_SIZE = 15;
+
+    // --- Optimization Refs ---
+    // 最新のStateをRefに保持して、アニメーションループ内で参照する
+    const quadPointsRef = useRef(quadPoints);
+    const selectedEffectRef = useRef(selectedEffect);
+    const moveThresholdRef = useRef(moveThreshold);
+    const effectCountRef = useRef(effectCount);
+    const isRecordingRef = useRef(isRecording);
+    const handCanvasFullscreenRef = useRef(handCanvasFullscreen);
+    const backgroundImageRef = useRef(backgroundImage);
+
+    // Stateが更新されたらRefも更新
+    useEffect(() => { quadPointsRef.current = quadPoints; }, [quadPoints]);
+    useEffect(() => { selectedEffectRef.current = selectedEffect; }, [selectedEffect]);
+    useEffect(() => { moveThresholdRef.current = moveThreshold; }, [moveThreshold]);
+    useEffect(() => { effectCountRef.current = effectCount; }, [effectCount]);
+    useEffect(() => { isRecordingRef.current = isRecording; }, [isRecording]);
+    useEffect(() => { handCanvasFullscreenRef.current = handCanvasFullscreen; }, [handCanvasFullscreen]);
+    useEffect(() => { backgroundImageRef.current = backgroundImage; }, [backgroundImage]);
+
+    // マトリックス計算のメモ化用Ref
+    const matricesRef = useRef<{ h: number[] | null, h_inv: number[] | null }>({ h: null, h_inv: null });
+
+    // --- Memoized calculations ---
+    const handCanvasDimensions = useMemo(() => {
+        const baseWidth = 400;
+        const ratio = handCanvasAspectRatio.split(":").map(Number);
+        const height = (baseWidth * ratio[1]) / ratio[0];
+        return { width: baseWidth, height };
+    }, [handCanvasAspectRatio]);
+
+    const handCanvasDimensionsRef = useRef(handCanvasDimensions);
+    useEffect(() => { handCanvasDimensionsRef.current = handCanvasDimensions; }, [handCanvasDimensions]);
+
 
     // キーポイント名の定義
     const keypointNames = [
@@ -199,16 +247,16 @@ const PoseDetector = (): JSX.Element => {
     };
 
     const recordPoseData = (poses: poseDetection.Pose[]) => {
-        if (!isRecording) return;
+        if (!isRecordingRef.current) return;
 
         const now = Date.now();
         // 0.25秒 = 250ms 間隔でデータを記録
         if (now - lastRecordTimeRef.current >= 250) {
             lastRecordTimeRef.current = now;
 
-            console.log(
-                `Recording pose data at ${now}, poses detected: ${poses.length}`
-            );
+            // console.log(
+            //     `Recording pose data at ${now}, poses detected: ${poses.length}`
+            // );
 
             for (const pose of poses) {
                 if (pose.keypoints && pose.keypoints.length > 0) {
@@ -220,7 +268,7 @@ const PoseDetector = (): JSX.Element => {
                         name: keypointNames[index] || `keypoint_${index}`,
                     }));
 
-                    console.log(`Recording keypoints: ${keypointsData.length} points`);
+                    // console.log(`Recording keypoints: ${keypointsData.length} points`);
 
                     setRecordedData((prev) => ({
                         ...prev,
@@ -250,26 +298,6 @@ const PoseDetector = (): JSX.Element => {
         audioRef.current.load();
         console.log("Changed sound to:", sound.dir + ".mp3");
     };
-
-    // --- State for interactive quadrilateral ---
-    const [quadPoints, setQuadPoints] = useState<Point[]>([
-        { x: 320, y: 180 },
-        { x: 960, y: 180 },
-        { x: 960, y: 540 },
-        { x: 320, y: 540 },
-    ]);
-    const [draggingPointIndex, setDraggingPointIndex] = useState<number | null>(
-        null
-    );
-    const DRAG_HANDLE_SIZE = 15;
-
-    // --- Memoized calculations ---
-    const handCanvasDimensions = useMemo(() => {
-        const baseWidth = 400;
-        const ratio = handCanvasAspectRatio.split(":").map(Number);
-        const height = (baseWidth * ratio[1]) / ratio[0];
-        return { width: baseWidth, height };
-    }, [handCanvasAspectRatio]);
 
     // --- Effect for loading background image ---
     useEffect(() => {
@@ -391,7 +419,7 @@ const PoseDetector = (): JSX.Element => {
     };
 
     const drawInteractiveOverlay = useCallback(
-        (ctx: CanvasRenderingContext2D) => {
+        (ctx: CanvasRenderingContext2D, quadPoints: Point[]) => {
             ctx.strokeStyle = "rgba(255, 255, 0, 0.8)";
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -409,21 +437,31 @@ const PoseDetector = (): JSX.Element => {
                 ctx.fill();
             });
         },
-        [quadPoints]
+        []
     );
 
     // パーティクルエフェクトと手の描画ロジックを統合した関数
     const drawResults = useCallback(
-        (poses: poseDetection.Pose[]) => {
+        (rawPoses: poseDetection.Pose[], transformedPoses: poseDetection.Pose[]) => {
             const video = videoRef.current;
             const canvas = canvasRef.current;
             const handCanvas = handCanvasRef.current;
+            // Refから最新の値を取得
+            const currentQuadPoints = quadPointsRef.current;
+            const currentSelectedEffect = selectedEffectRef.current;
+            const currentMoveThreshold = moveThresholdRef.current;
+            const currentEffectCount = effectCountRef.current;
+            const isFullscreen = handCanvasFullscreenRef.current;
+            const currentDimensions = handCanvasDimensionsRef.current;
+            const currentBackgroundImage = backgroundImageRef.current;
+            const h = matricesRef.current.h;
+
             if (!video || !canvas || !handCanvas || video.videoWidth === 0) return;
 
             // --- キャンバスの解像度設定 ---
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            if (handCanvasFullscreen) {
+            if (isFullscreen) {
                 const rect = handCanvas.getBoundingClientRect();
                 if (rect.width > 0 && rect.height > 0) {
                     if (
@@ -435,8 +473,8 @@ const PoseDetector = (): JSX.Element => {
                     }
                 }
             } else {
-                handCanvas.width = handCanvasDimensions.width;
-                handCanvas.height = handCanvasDimensions.height;
+                handCanvas.width = currentDimensions.width;
+                handCanvas.height = currentDimensions.height;
             }
 
             const ctx = canvas.getContext("2d");
@@ -445,19 +483,22 @@ const PoseDetector = (): JSX.Element => {
 
             // --- メインキャンバスの描画 ---
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (const pose of poses) {
+            // 元の映像上の骨格は rawPoses ではなく transformedPoses の逆変換版が必要だが、
+            // 簡略化のため、rawPoses (handCanvas座標) に対応するものは draw していない。
+            // そもそも transformedPoses は「手元カメラ」の映像から検出したポーズを「元のカメラ座標」に戻したものなので、これを描画する。
+            for (const pose of transformedPoses) {
                 if (pose.keypoints) {
                     drawKeypoints(pose.keypoints, 0.5, ctx);
                     drawSkeleton(pose.keypoints, 0.5, ctx);
                 }
             }
-            drawInteractiveOverlay(ctx);
+            drawInteractiveOverlay(ctx, currentQuadPoints);
 
             // --- 手のキャンバスの背景描画 ---
-            if (backgroundImage) {
+            if (currentBackgroundImage) {
                 // 背景画像があれば描画
                 handCtx.drawImage(
-                    backgroundImage,
+                    currentBackgroundImage,
                     0,
                     0,
                     handCanvas.width,
@@ -483,10 +524,11 @@ const PoseDetector = (): JSX.Element => {
                     }
                 }
 
-                const particleCount = Math.min(Math.max(Math.floor(magnitude * 2), 5), 30);
+                // const particleCount = Math.min(Math.max(Math.floor(magnitude * 2), 5), 30);
+                const particleCount = currentEffectCount;
                 for (let i = 0; i < particleCount; i++) {
                     let particle: Particle;
-                    switch (selectedEffect) {
+                    switch (currentSelectedEffect) {
                         case "Sparkle":
                             particle = new SparkleParticle(x, y, magnitude);
                             break;
@@ -527,67 +569,51 @@ const PoseDetector = (): JSX.Element => {
                 }
             }
 
-            // --- ホモグラフィ変換の準備 ---
-            const dstPoints: Point[] = [
-                { x: 0, y: 0 },
-                { x: handCanvas.width, y: 0 },
-                { x: handCanvas.width, y: handCanvas.height },
-                { x: 0, y: handCanvas.height },
-            ];
-            const h = getHomographyMatrix(quadPoints, dstPoints);
-            if (!h) return;
-
             // --- 手の検出、マーカー描画、エフェクトトリガー ---
+            // rawPoses (= 手元キャンバス座標系でのポーズ) を使用する
             let isLeftHandVisible = false;
             let isRightHandVisible = false;
 
-            for (const pose of poses) {
+            for (const pose of rawPoses) {
                 if (!pose.keypoints) continue;
                 const leftWrist = pose.keypoints[9];
                 const rightWrist = pose.keypoints[10];
 
                 // 左手の処理
-                if (
-                    leftWrist?.score &&
-                    leftWrist.score > 0.5 &&
-                    isPointInQuad(leftWrist, quadPoints)
-                ) {
+                if (leftWrist?.score && leftWrist.score > 0.5) {
                     isLeftHandVisible = true;
-                    const transformedPoint = transformPoint(leftWrist, h);
+                    // ここでは rawPoses (handCanvasの座標) をそのまま使える
+                    const currentPoint = { x: leftWrist.x, y: leftWrist.y };
 
                     const lastPos = lastHandPositionsRef.current.left;
                     if (lastPos) {
                         const distance = Math.sqrt(
-                            (transformedPoint.x - lastPos.x) ** 2 +
-                            (transformedPoint.y - lastPos.y) ** 2
+                            (currentPoint.x - lastPos.x) ** 2 +
+                            (currentPoint.y - lastPos.y) ** 2
                         );
-                        if (distance > 5) {
-                            emitParticles(transformedPoint.x, transformedPoint.y, distance);
+                        if (distance > currentMoveThreshold) {
+                            emitParticles(currentPoint.x, currentPoint.y, distance);
                         }
                     }
-                    lastHandPositionsRef.current.left = transformedPoint;
+                    lastHandPositionsRef.current.left = currentPoint;
                 }
 
                 // 右手の処理
-                if (
-                    rightWrist?.score &&
-                    rightWrist.score > 0.5 &&
-                    isPointInQuad(rightWrist, quadPoints)
-                ) {
+                if (rightWrist?.score && rightWrist.score > 0.5) {
                     isRightHandVisible = true;
-                    const transformedPoint = transformPoint(rightWrist, h);
+                    const currentPoint = { x: rightWrist.x, y: rightWrist.y };
 
                     const lastPos = lastHandPositionsRef.current.right;
                     if (lastPos) {
                         const distance = Math.sqrt(
-                            (transformedPoint.x - lastPos.x) ** 2 +
-                            (transformedPoint.y - lastPos.y) ** 2
+                            (currentPoint.x - lastPos.x) ** 2 +
+                            (currentPoint.y - lastPos.y) ** 2
                         );
-                        if (distance > 5) {
-                            emitParticles(transformedPoint.x, transformedPoint.y, distance);
+                        if (distance > currentMoveThreshold) {
+                            emitParticles(currentPoint.x, currentPoint.y, distance);
                         }
                     }
-                    lastHandPositionsRef.current.right = transformedPoint;
+                    lastHandPositionsRef.current.right = currentPoint;
                 }
             }
 
@@ -595,14 +621,7 @@ const PoseDetector = (): JSX.Element => {
             if (!isLeftHandVisible) lastHandPositionsRef.current.left = null;
             if (!isRightHandVisible) lastHandPositionsRef.current.right = null;
         },
-        [
-            quadPoints,
-            drawInteractiveOverlay,
-            handCanvasDimensions,
-            handCanvasFullscreen,
-            backgroundImage,
-            selectedEffect, // 依存配列に追加
-        ]
+        [drawInteractiveOverlay] // 依存関係を最小限に。Refsを使うことで再生成を防ぐ
     );
 
     // --- Pointer Event Handlers for Interactive Quad (Mouse & Touch) ---
@@ -686,10 +705,30 @@ const PoseDetector = (): JSX.Element => {
 
     // --- Core Detection and Initialization Logic ---
 
+    // 行列更新ロジック
+    const updateMatrices = useCallback(() => {
+        const transformedCanvas = transformedCanvasRef.current;
+        const handCanvas = handCanvasRef.current;
+        const video = videoRef.current;
+
+        if (!transformedCanvas || !handCanvas || !video) return;
+
+        // handCanvasのサイズに合わせる (リサイズが必要な場合のみ)
+        // ここでのサイズ変更は描画サイクル外で行うべきだが、
+        // 簡易的にdetectPose内でサイズチェックしているため、ここでは計算のみ行う
+        // 実際にはwidth/heightはこの関数内で確定できない(Fullscreenなどがあるため)ので、
+        // detectPose内でサイズ確定後に計算する。
+
+        // なので、ここはヘルパーとして定義し、detectPoseから呼ぶ形にする。
+    }, []);
+
     const detectPose = useCallback(async () => {
         const detector = detectorRef.current;
         const video = videoRef.current;
         const handCanvas = handCanvasRef.current;
+        const currentQuadPoints = quadPointsRef.current;
+        const isFullscreen = handCanvasFullscreenRef.current;
+        const currentDimensions = handCanvasDimensionsRef.current;
 
         if (detector && video && video.readyState === 4 && handCanvas) {
             try {
@@ -700,16 +739,22 @@ const PoseDetector = (): JSX.Element => {
                 const transformedCanvas = transformedCanvasRef.current;
 
                 // handCanvasのサイズに合わせる
-                if (handCanvasFullscreen) {
+                let targetWidth, targetHeight;
+                if (isFullscreen) {
                     const rect = handCanvas.getBoundingClientRect();
-                    transformedCanvas.width = rect.width > 0 ? rect.width : handCanvasDimensions.width;
-                    transformedCanvas.height = rect.height > 0 ? rect.height : handCanvasDimensions.height;
+                    targetWidth = rect.width > 0 ? rect.width : currentDimensions.width;
+                    targetHeight = rect.height > 0 ? rect.height : currentDimensions.height;
                 } else {
-                    transformedCanvas.width = handCanvasDimensions.width;
-                    transformedCanvas.height = handCanvasDimensions.height;
+                    targetWidth = currentDimensions.width;
+                    targetHeight = currentDimensions.height;
                 }
 
-
+                if (transformedCanvas.width !== targetWidth || transformedCanvas.height !== targetHeight) {
+                    transformedCanvas.width = targetWidth;
+                    transformedCanvas.height = targetHeight;
+                    // サイズが変わったので行列再計算フラグを立てても良いが、
+                    // 毎フレームチェックして更新するほうがシンプル（計算コストは低い）
+                }
 
                 // WebGLコンテキストの取得
                 let gl = transformedCanvas.getContext('webgl');
@@ -718,12 +763,12 @@ const PoseDetector = (): JSX.Element => {
                     return;
                 }
 
-                // シェーダープログラムの初期化（プロパティとして保存しておくと良いが、ここでは簡易的に毎回チェック or canvasに紐づける）
-                // NOTE: 本番環境ではuseRefなどでキャッシュすべきですが、簡略化のためcanvasプロパティに保存するハックを使います
+                // シェーダープログラムの初期化
                 type GLCanvas = HTMLCanvasElement & { glContextInitialized?: boolean; program?: WebGLProgram; positionBuffer?: WebGLBuffer; texCoordBuffer?: WebGLBuffer; texture?: WebGLTexture };
                 const glCanvas = transformedCanvas as GLCanvas;
 
                 if (!glCanvas.glContextInitialized) {
+                    // ... (Shader initialization code is same, omitted for brevity but logic must exist)
                     const vertexShaderSource = `
                         attribute vec2 a_position;
                         attribute vec2 a_texCoord;
@@ -733,7 +778,6 @@ const PoseDetector = (): JSX.Element => {
                             v_texCoord = a_texCoord;
                         }
                     `;
-                    // フラグメントシェーダー：逆ホモグラフィ変換を行う
                     const fragmentShaderSource = `
                         precision mediump float;
                         uniform sampler2D u_image;
@@ -742,30 +786,20 @@ const PoseDetector = (): JSX.Element => {
                         uniform float u_h[9]; // 3x3 matrix flattened
 
                         void main() {
-                            // 現在のピクセル座標 (x, y)
                             float x = gl_FragCoord.x;
-                            float y = u_resolution.y - gl_FragCoord.y; // WebGLは左下が原点なのでYを反転
-
-                            // 逆ホモグラフィ変換: src = H_inv * dst
-                            // H_inv は u_h で渡される
-                            // dst は (x, y, 1)
-                            
+                            float y = u_resolution.y - gl_FragCoord.y; 
                             float Z = u_h[6] * x + u_h[7] * y + u_h[8];
                             float srcX = (u_h[0] * x + u_h[1] * y + u_h[2]) / Z;
                             float srcY = (u_h[3] * x + u_h[4] * y + u_h[5]) / Z;
-
-                            // テクスチャ座標 (0.0 - 1.0) に変換
                             vec2 texCoord = vec2(srcX / u_videoResolution.x, srcY / u_videoResolution.y);
 
-                            // 範囲外チェック
                             if (texCoord.x >= 0.0 && texCoord.x <= 1.0 && texCoord.y >= 0.0 && texCoord.y <= 1.0) {
                                 gl_FragColor = texture2D(u_image, texCoord);
                             } else {
-                                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // 範囲外は黒
+                                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
                             }
                         }
                     `;
-
                     const createShader = (gl: WebGLRenderingContext, type: number, source: string) => {
                         const shader = gl.createShader(type);
                         if (!shader) return null;
@@ -778,40 +812,23 @@ const PoseDetector = (): JSX.Element => {
                         }
                         return shader;
                     };
-
                     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
                     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-
                     if (!vertexShader || !fragmentShader) return;
-
                     const program = gl.createProgram();
                     if (!program) return;
                     gl.attachShader(program, vertexShader);
                     gl.attachShader(program, fragmentShader);
                     gl.linkProgram(program);
-
-                    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-                        console.error(gl.getProgramInfoLog(program));
-                        return;
-                    }
-
                     glCanvas.program = program;
 
-                    // バッファの設定
                     const positionBuffer = gl.createBuffer();
                     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-                    // 画面全体を覆う矩形 (クリップ空間座標)
                     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-                        -1, -1,
-                        1, -1,
-                        -1, 1,
-                        -1, 1,
-                        1, -1,
-                        1, 1,
+                        -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
                     ]), gl.STATIC_DRAW);
                     glCanvas.positionBuffer = positionBuffer || undefined;
 
-                    // テクスチャ
                     const texture = gl.createTexture();
                     gl.bindTexture(gl.TEXTURE_2D, texture);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -819,7 +836,6 @@ const PoseDetector = (): JSX.Element => {
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
                     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
                     glCanvas.texture = texture || undefined;
-
                     glCanvas.glContextInitialized = true;
                 }
 
@@ -827,14 +843,11 @@ const PoseDetector = (): JSX.Element => {
                 if (!program) return;
 
                 gl.useProgram(program);
-
-                // attributesの設定
                 const positionLocation = gl.getAttribLocation(program, "a_position");
                 gl.enableVertexAttribArray(positionLocation);
                 gl.bindBuffer(gl.ARRAY_BUFFER, glCanvas.positionBuffer!);
                 gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-                // uniformsの設定
                 const resolutionLocation = gl.getUniformLocation(program, "u_resolution");
                 const videoResolutionLocation = gl.getUniformLocation(program, "u_videoResolution");
                 const hLocation = gl.getUniformLocation(program, "u_h");
@@ -842,73 +855,65 @@ const PoseDetector = (): JSX.Element => {
                 gl.uniform2f(resolutionLocation, transformedCanvas.width, transformedCanvas.height);
                 gl.uniform2f(videoResolutionLocation, video.videoWidth, video.videoHeight);
 
-                // ホモグラフィ変換用の行列を計算
+                // --- 行列計算 (最適化: 前回の値を再利用するかチェック) ---
+                // 本来は依存値が変わった時のみ計算すべきですが、ここでは計算コスト削減のため
+                // 行列計算結果をmatricesRefにキャッシュし、detectPose内では常に最新のQuadで再計算してRefを更新する
+                // (requestAnimationFrameループ内なので、Refの同期ズレを防ぐため毎回計算してもWebAssembly負荷よりは軽い)
+                // ただし、座標が変わっていないなら計算をスキップするロジックを入れるとさらに良い。
+
                 const dstPoints: Point[] = [
                     { x: 0, y: 0 },
                     { x: transformedCanvas.width, y: 0 },
                     { x: transformedCanvas.width, y: transformedCanvas.height },
                     { x: 0, y: transformedCanvas.height },
                 ];
-                const h = getHomographyMatrix(quadPoints, dstPoints); // これは順変換
-                // 逆変換行列を計算（変換後の座標を元の座標系に戻すため）
-                const h_inv = getHomographyMatrix(dstPoints, quadPoints);
 
-                if (!h_inv) return;
+                // 毎回計算 (安定性重視)
+                const h = getHomographyMatrix(currentQuadPoints, dstPoints);
+                const h_inv = getHomographyMatrix(dstPoints, currentQuadPoints);
 
-                // GLSL uniform array (float u_h[9]) にデータを渡す
+                if (!h || !h_inv) return;
+                matricesRef.current = { h, h_inv }; // キャッシュ更新
+
                 gl.uniform1fv(hLocation, new Float32Array(h_inv));
 
-                // テクスチャの更新
                 gl.activeTexture(gl.TEXTURE0);
                 gl.bindTexture(gl.TEXTURE_2D, glCanvas.texture!);
                 gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
-
-                // 描画
                 gl.viewport(0, 0, transformedCanvas.width, transformedCanvas.height);
                 gl.clearColor(0, 0, 0, 0);
                 gl.clear(gl.COLOR_BUFFER_BIT);
                 gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-                // 変換後の画像に対して骨格検出を実行
-                const poses = await detector.estimatePoses(transformedCanvas, {
+                // --- 手の検出 (transformedCanvasを使用) ---
+                const rawPoses = await detector.estimatePoses(transformedCanvas, {
                     flipHorizontal: false,
                 });
 
-                // 検出結果の座標を元の座標系に変換
-                const transformedPoses = poses.map(pose => {
+                // --- 座標変換 (HandCanvas -> Original Video) ---
+                // rawPoses = HandCanvas上の座標
+                // transformedPoses = OriginalVideo上の座標 (メインキャンバス表示用)
+                const transformedPoses = rawPoses.map(pose => {
                     if (!pose.keypoints) return pose;
-
                     const transformedKeypoints = pose.keypoints.map(kp => {
-                        // 変換後のキャンバス座標系から元のビデオ座標系に変換
                         const originalPoint = transformPoint({ x: kp.x, y: kp.y }, h_inv);
-                        return {
-                            ...kp,
-                            x: originalPoint.x,
-                            y: originalPoint.y
-                        };
+                        return { ...kp, x: originalPoint.x, y: originalPoint.y };
                     });
-
-                    return {
-                        ...pose,
-                        keypoints: transformedKeypoints
-                    };
+                    return { ...pose, keypoints: transformedKeypoints };
                 });
 
-                recordPoseData(transformedPoses); // データ記録を追加
-                drawResults(transformedPoses);
+                recordPoseData(transformedPoses);
+                drawResults(rawPoses, transformedPoses); // rawPosesも渡す
 
-                // デバッグ情報をコンソールに出力（記録中のみ）
-                if (isRecording && transformedPoses.length > 0) {
-                    console.log(
-                        `Detected ${transformedPoses.length} pose(s) with ${transformedPoses[0].keypoints?.length || 0
-                        } keypoints`
-                    );
+                if (isRecordingRef.current && transformedPoses.length > 0) {
+                    // ログ出力など...
                 }
+
             } catch (error) {
                 console.error("姿勢検出中にエラーが発生しました:", error);
             }
         }
-    }, [drawResults, isRecording, quadPoints, handCanvasFullscreen, handCanvasDimensions]);
+    }, [drawResults]); // 依存関係を空にするか、不変なものだけにする
 
     // Effect for heavy initialization (model loading, camera setup)
     useEffect(() => {
@@ -976,7 +981,6 @@ const PoseDetector = (): JSX.Element => {
                                 },
                             });
                         } else {
-                            // カメラが選択されていない場合（初回など）、デフォルトのカメラを要求して許可プロンプトを表示させる
                             stream = await navigator.mediaDevices.getUserMedia({
                                 video: {
                                     width: { ideal: 1280 },
@@ -997,8 +1001,6 @@ const PoseDetector = (): JSX.Element => {
                             setIsCameraReady(true);
                             setIsLoading(false);
                             setStatus("準備完了");
-
-                            // 許可が得られたので、カメラリストを再取得・更新
                             await getCameraDevices();
                         };
                     } catch (error) {
@@ -1059,7 +1061,7 @@ const PoseDetector = (): JSX.Element => {
     return (
         <div className="flex flex-col items-center p-4 md:p-6 bg-gray-50 min-h-screen">
             <h1 className="text-2xl md:text-3xl font-bold mb-4 text-gray-800">
-                リアルタイム姿勢検出 (Test 18: 共有エフェクト設定)
+                リアルタイム姿勢検出 (Test 18: 最適化された共有エフェクト設定)
             </h1>
 
             {isLoading && (
@@ -1377,6 +1379,44 @@ const PoseDetector = (): JSX.Element => {
                                 <option value="GeometricSnow">Geometric Snow</option>
                                 <option value="GiftBox">Gift Box</option>
                             </select>
+                        </label>
+                    </div>
+                </div>
+
+                {/* エフェクト調整スライダー */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                    <div>
+                        <label className="flex flex-col space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">動きの反応感度 (しきい値)</span>
+                                <span className="text-sm font-bold text-blue-600">{moveThreshold}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="1"
+                                max="50"
+                                value={moveThreshold}
+                                onChange={(e) => setMoveThreshold(Number(e.target.value))}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                            <span className="text-xs text-gray-500">値が小さいほど敏感に反応します</span>
+                        </label>
+                    </div>
+                    <div>
+                        <label className="flex flex-col space-y-2">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-700">エフェクト数 (パーティクル)</span>
+                                <span className="text-sm font-bold text-blue-600">{effectCount}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min="1"
+                                max="100"
+                                value={effectCount}
+                                onChange={(e) => setEffectCount(Number(e.target.value))}
+                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                            />
+                            <span className="text-xs text-gray-500">1回の反応で描画される数</span>
                         </label>
                     </div>
                 </div>

@@ -290,7 +290,7 @@ export const BackgroundImages: BackgroundImage[] = [
   { name: "宇宙", path: "/images/space.jpg" },
   { name: "サイバー", path: "/images/cyber.jpg" },
   { name: "森", path: "/images/forest.jpg" },
-  { name: "ネオン", path: "/images/neon.webp" },
+  { name: "クリスマス", path: "/images/xmas.jpg" },
 ];
 
 // アニメーション設定
