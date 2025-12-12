@@ -210,6 +210,36 @@ export const researchData: Research[] = [
       },
     ],
   },
+  {
+    id: "sixth-step",
+    title: "11月21日ミーティング後開発物",
+    description:
+      "キラキラした音やエフェクト、エフェクトサイズの動的変更、記録と映像の分離、明るさ問題、記録実装画面でショートカットキー設定などを実装する。",
+    longDescription:
+      "本ステップでは、キラキラした音やエフェクト、エフェクトサイズの動的変更、記録と映像の分離、明るさ問題、記録実装画面でショートカットキー設定などを実装する。",
+    imageUrl: "https://placehold.co/600x400/1a1a2e/e0e0e0?text=11/21_meeting",
+    publications: [
+      {
+        id: 1,
+        title:
+          "test17: 骨格認識を指定範囲内に限定するよう改善",
+        journal:
+          "test16に骨格認識を指定範囲内に限定するよう改善。指定範囲内はホモグラフィ変換を使用。",
+        year: 2025,
+        url: "test17",
+      },
+      {
+        id: 2,
+        title:
+          "test18: クリスマスエフェクトの実装。ホモグラフィ変換処理を高速化。",
+        journal:
+          "test17にクリスマスエフェクトの実装。ホモグラフィ変換処理をGPUで行うよう改善。",
+        year: 2025,
+        url: "test18",
+      },
+
+    ],
+  },
 ];
 
 export const Sounds: SoundList[] = [
