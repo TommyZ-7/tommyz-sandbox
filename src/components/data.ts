@@ -237,6 +237,15 @@ export const researchData: Research[] = [
         year: 2025,
         url: "test18",
       },
+      {
+        id: 3,
+        title:
+          "test19: MoveNet/MediaPipeモデルの選択肢を追加。粒子エフェクトの実装。",
+        journal:
+          "test18にMoveNet/MediaPipeモデルを切り替える機能を追加。",
+        year: 2025,
+        url: "test19",
+      },
 
     ],
   },

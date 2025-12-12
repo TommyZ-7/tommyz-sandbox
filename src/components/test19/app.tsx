@@ -1127,14 +1127,14 @@ const PoseDetector = (): JSX.Element => {
     };
 
     return (
-        <div className="flex flex-col items-center p-4 md:p-6 bg-gray-50 min-h-screen">
-            <h1 className="text-2xl md:text-3xl font-bold mb-4 text-gray-800">
+        <div className="flex flex-col items-center p-4 md:p-6 bg-gray-50 dark:bg-gray-900 min-h-screen">
+            <h1 className="text-2xl md:text-3xl font-bold mb-4 text-gray-800 dark:text-white">
                 リアルタイム姿勢検出 (Test 19: MoveNet/MediaPipe 切り替え)
             </h1>
 
             {isLoading && (
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <p>{status}</p>
+                <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="dark:text-blue-100">{status}</p>
                 </div>
             )}
 
@@ -1142,14 +1142,14 @@ const PoseDetector = (): JSX.Element => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 w-full max-w-5xl">
                 {/* Controls for Camera, Mode, Model */}
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         カメラ
                     </label>
                     <select
                         value={selectedCameraId}
                         onChange={(e) => setSelectedCameraId(e.target.value)}
                         disabled={isLoading || cameras.length <= 1}
-                        className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm"
+                        className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                     >
                         {cameras.map((camera, index) => (
                             <option key={camera.deviceId} value={camera.deviceId}>
@@ -1159,16 +1159,16 @@ const PoseDetector = (): JSX.Element => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         処理モード
                     </label>
                     <div className="flex space-x-1 rounded-md shadow-sm" role="group">
                         <button
                             onClick={() => setProcessingMode("WebGPU")}
                             disabled={isLoading}
-                            className={`px-4 py-2 text-sm font-medium border rounded-l-lg ${processingMode === "WebGPU"
+                            className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-l-lg ${processingMode === "WebGPU"
                                 ? "bg-purple-600 text-white"
-                                : "bg-white"
+                                : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                 }`}
                         >
                             WebGPU
@@ -1176,7 +1176,7 @@ const PoseDetector = (): JSX.Element => {
                         <button
                             onClick={() => setProcessingMode("GPU")}
                             disabled={isLoading}
-                            className={`px-4 py-2 text-sm font-medium border-t border-b ${processingMode === "GPU" ? "bg-red-600 text-white" : "bg-white"
+                            className={`px-4 py-2 text-sm font-medium border-t border-b dark:border-gray-600 ${processingMode === "GPU" ? "bg-red-600 text-white" : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                 }`}
                         >
                             GPU
@@ -1184,9 +1184,9 @@ const PoseDetector = (): JSX.Element => {
                         <button
                             onClick={() => setProcessingMode("CPU")}
                             disabled={isLoading}
-                            className={`px-4 py-2 text-sm font-medium border rounded-r-lg ${processingMode === "CPU"
+                            className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-r-lg ${processingMode === "CPU"
                                 ? "bg-orange-500 text-white"
-                                : "bg-white"
+                                : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                 }`}
                         >
                             CPU
@@ -1194,16 +1194,16 @@ const PoseDetector = (): JSX.Element => {
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         検出器タイプ
                     </label>
                     <div className="flex space-x-1 rounded-md shadow-sm mb-2" role="group">
                         <button
                             onClick={() => setDetectorType("MoveNet")}
                             disabled={isLoading}
-                            className={`px-3 py-2 text-sm font-medium border rounded-l-lg ${detectorType === "MoveNet"
+                            className={`px-3 py-2 text-sm font-medium border dark:border-gray-600 rounded-l-lg ${detectorType === "MoveNet"
                                 ? "bg-blue-600 text-white"
-                                : "bg-white"
+                                : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                 }`}
                         >
                             MoveNet (TensorFlow)
@@ -1211,16 +1211,16 @@ const PoseDetector = (): JSX.Element => {
                         <button
                             onClick={() => setDetectorType("MediaPipe")}
                             disabled={isLoading}
-                            className={`px-3 py-2 text-sm font-medium border rounded-r-lg ${detectorType === "MediaPipe"
+                            className={`px-3 py-2 text-sm font-medium border dark:border-gray-600 rounded-r-lg ${detectorType === "MediaPipe"
                                 ? "bg-green-600 text-white"
-                                : "bg-white"
+                                : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                 }`}
                         >
                             MediaPipe (BlazePose)
                         </button>
                     </div>
 
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         モデル種別
                     </label>
                     {detectorType === "MoveNet" ? (
@@ -1228,9 +1228,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setMoveNetModelType("Lightning")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border rounded-l-lg ${moveNetModelType === "Lightning"
+                                className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-l-lg ${moveNetModelType === "Lightning"
                                     ? "bg-blue-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 Lightning
@@ -1238,9 +1238,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setMoveNetModelType("Thunder")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border-t border-b ${moveNetModelType === "Thunder"
+                                className={`px-4 py-2 text-sm font-medium border-t border-b dark:border-gray-600 ${moveNetModelType === "Thunder"
                                     ? "bg-indigo-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 Thunder
@@ -1248,9 +1248,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setMoveNetModelType("multiPose")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border rounded-r-lg ${moveNetModelType === "multiPose"
+                                className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-r-lg ${moveNetModelType === "multiPose"
                                     ? "bg-green-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 MultiPose
@@ -1261,9 +1261,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setBlazePoseModelType("lite")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border rounded-l-lg ${blazePoseModelType === "lite"
+                                className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-l-lg ${blazePoseModelType === "lite"
                                     ? "bg-blue-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 Lite
@@ -1271,9 +1271,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setBlazePoseModelType("full")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border-t border-b ${blazePoseModelType === "full"
+                                className={`px-4 py-2 text-sm font-medium border-t border-b dark:border-gray-600 ${blazePoseModelType === "full"
                                     ? "bg-indigo-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 Full
@@ -1281,9 +1281,9 @@ const PoseDetector = (): JSX.Element => {
                             <button
                                 onClick={() => setBlazePoseModelType("heavy")}
                                 disabled={isLoading}
-                                className={`px-4 py-2 text-sm font-medium border rounded-r-lg ${blazePoseModelType === "heavy"
+                                className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 rounded-r-lg ${blazePoseModelType === "heavy"
                                     ? "bg-green-600 text-white"
-                                    : "bg-white"
+                                    : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                     }`}
                             >
                                 Heavy
@@ -1296,11 +1296,11 @@ const PoseDetector = (): JSX.Element => {
             {/* --- Canvases --- */}
             <div className="flex flex-col lg:flex-row items-start justify-center gap-6 w-full max-w-7xl">
                 <div className="flex-grow w-full lg:w-auto">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-2">
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
                         全身ポーズ検出 (枠内をドラッグ or 下のスライダーで範囲指定)
                     </h3>
                     <div
-                        className="relative border-2 border-gray-300 rounded-lg overflow-hidden max-w-full aspect-[16/9] cursor-pointer touch-none"
+                        className="relative border-2 border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden max-w-full aspect-[16/9] cursor-pointer touch-none"
                         onMouseDown={handlePointerDown}
                         onMouseMove={handlePointerMove}
                         onMouseUp={handlePointerUp}
@@ -1325,7 +1325,7 @@ const PoseDetector = (): JSX.Element => {
                 <div className="flex-shrink-0 w-full lg:w-auto">
                     <div className="flex items-center mb-3">
                         <div>
-                            <label className="block text-lg font-semibold text-gray-700 mb-2">
+                            <label className="block text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
                                 手の位置 (アスペクト比)
                             </label>
                             <div className="flex space-x-1 rounded-md shadow-sm" role="group">
@@ -1333,9 +1333,9 @@ const PoseDetector = (): JSX.Element => {
                                     <button
                                         key={ratio}
                                         onClick={() => setHandCanvasAspectRatio(ratio)}
-                                        className={`px-4 py-2 text-sm font-medium border first:rounded-l-lg last:rounded-r-lg ${handCanvasAspectRatio === ratio
+                                        className={`px-4 py-2 text-sm font-medium border dark:border-gray-600 first:rounded-l-lg last:rounded-r-lg ${handCanvasAspectRatio === ratio
                                             ? "bg-teal-500 text-white"
-                                            : "bg-white"
+                                            : "bg-white dark:bg-gray-800 dark:text-gray-300"
                                             }`}
                                     >
                                         {ratio}
@@ -1346,7 +1346,7 @@ const PoseDetector = (): JSX.Element => {
                         {/* フルスクリーン切り替えボタン */}
                         <button
                             onClick={() => setHandCanvasFullscreen(!handCanvasFullscreen)}
-                            className="ml-4 mt-8 px-3 py-2 text-sm font-medium border rounded-lg shadow-sm bg-white hover:bg-gray-50 transition"
+                            className="ml-4 mt-8 px-3 py-2 text-sm font-medium border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                             aria-label={
                                 handCanvasFullscreen ? "通常表示に戻す" : "フルスクリーンで表示"
                             }
@@ -1359,7 +1359,7 @@ const PoseDetector = (): JSX.Element => {
                         className={
                             handCanvasFullscreen
                                 ? "fixed top-0 left-0 w-screen h-screen bg-black flex justify-center items-center z-50 cursor-zoom-out"
-                                : "border-2 border-gray-300 rounded-lg overflow-hidden bg-gray-800 mx-auto"
+                                : "border-2 border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-800 mx-auto"
                         }
                         style={
                             !handCanvasFullscreen
@@ -1391,18 +1391,18 @@ const PoseDetector = (): JSX.Element => {
 
             {/* --- Sliders for Quad Points --- */}
             {!isLoading && isCameraReady && (
-                <div className="w-full max-w-5xl mt-6 p-4 bg-white rounded-lg border">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-3">
+                <div className="w-full max-w-5xl mt-6 p-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                    <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
                         検出範囲の座標調整
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-4">
                         {quadPoints.map((point, index) => (
                             <div key={index}>
-                                <h4 className="font-semibold text-gray-600">
+                                <h4 className="font-semibold text-gray-600 dark:text-gray-400">
                                     頂点 {index + 1}
                                 </h4>
                                 <div className="mt-1">
-                                    <label className="flex items-center space-x-2 text-sm">
+                                    <label className="flex items-center space-x-2 text-sm dark:text-gray-300">
                                         <span>X:</span>
                                         <input
                                             type="range"
@@ -1418,7 +1418,7 @@ const PoseDetector = (): JSX.Element => {
                                     </label>
                                 </div>
                                 <div className="mt-1">
-                                    <label className="flex items-center space-x-2 text-sm">
+                                    <label className="flex items-center space-x-2 text-sm dark:text-gray-300">
                                         <span>Y:</span>
                                         <input
                                             type="range"
@@ -1440,14 +1440,14 @@ const PoseDetector = (): JSX.Element => {
             )}
 
             {/* --- Sound, Background, and Effect Settings --- */}
-            <div className="mt-6 w-full max-w-5xl p-4 bg-white rounded-lg border">
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">
+            <div className="mt-6 w-full max-w-5xl p-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">
                     エフェクト設定
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label className="flex items-center space-x-2 text-sm">
-                            <span className="text-gray-700 font-medium">音声:</span>
+                            <span className="text-gray-700 dark:text-gray-300 font-medium">音声:</span>
                             <select
                                 value={selectedSound?.name}
                                 onChange={(e) => {
@@ -1458,16 +1458,16 @@ const PoseDetector = (): JSX.Element => {
                                         changeSound(foundSound);
                                     }
                                 }}
-                                className="border rounded-md text-gray-700 p-1 w-full"
+                                className="border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 p-1 w-full"
                             >
-                                <option value="" className="text-gray-700">
+                                <option value="" className="text-gray-700 dark:text-gray-300">
                                     選択してください
                                 </option>
                                 {Sounds.map((sound) => (
                                     <option
                                         key={sound.name}
                                         value={sound.name}
-                                        className="text-gray-700"
+                                        className="text-gray-700 dark:text-gray-300"
                                     >
                                         {sound.name}
                                     </option>
@@ -1477,11 +1477,11 @@ const PoseDetector = (): JSX.Element => {
                     </div>
                     <div>
                         <label className="flex items-center space-x-2 text-sm">
-                            <span className="text-gray-700 font-medium">背景画像:</span>
+                            <span className="text-gray-700 dark:text-gray-300 font-medium">背景画像:</span>
                             <select
                                 value={selectedBackground}
                                 onChange={(e) => setSelectedBackground(e.target.value)}
-                                className="border rounded-md text-gray-700 p-1 w-full"
+                                className="border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 p-1 w-full"
                             >
                                 {BackgroundImages.map((img) => (
                                     <option key={img.name} value={img.path}>
@@ -1493,11 +1493,11 @@ const PoseDetector = (): JSX.Element => {
                     </div>
                     <div>
                         <label className="flex items-center space-x-2 text-sm">
-                            <span className="text-gray-700 font-medium">エフェクト:</span>
+                            <span className="text-gray-700 dark:text-gray-300 font-medium">エフェクト:</span>
                             <select
                                 value={selectedEffect}
                                 onChange={(e) => setSelectedEffect(e.target.value as EffectType)}
-                                className="border rounded-md text-gray-700 p-1 w-full"
+                                className="border border-gray-300 dark:border-gray-600 rounded-md text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-700 p-1 w-full"
                             >
                                 <option value="Normal">Normal</option>
                                 <option value="Sparkle">Sparkle</option>
@@ -1513,12 +1513,12 @@ const PoseDetector = (): JSX.Element => {
                 </div>
 
                 {/* エフェクト調整スライダー */}
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-gray-100 dark:border-gray-700">
                     <div>
                         <label className="flex flex-col space-y-2">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-gray-700">動きの反応感度 (しきい値)</span>
-                                <span className="text-sm font-bold text-blue-600">{moveThreshold}</span>
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">動きの反応感度 (しきい値)</span>
+                                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{moveThreshold}</span>
                             </div>
                             <input
                                 type="range"
@@ -1526,16 +1526,16 @@ const PoseDetector = (): JSX.Element => {
                                 max="50"
                                 value={moveThreshold}
                                 onChange={(e) => setMoveThreshold(Number(e.target.value))}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
                             />
-                            <span className="text-xs text-gray-500">値が小さいほど敏感に反応します</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">値が小さいほど敏感に反応します</span>
                         </label>
                     </div>
                     <div>
                         <label className="flex flex-col space-y-2">
                             <div className="flex justify-between items-center">
-                                <span className="text-sm font-medium text-gray-700">エフェクト数 (パーティクル)</span>
-                                <span className="text-sm font-bold text-blue-600">{effectCount}</span>
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">エフェクト数 (パーティクル)</span>
+                                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{effectCount}</span>
                             </div>
                             <input
                                 type="range"
@@ -1543,17 +1543,17 @@ const PoseDetector = (): JSX.Element => {
                                 max="100"
                                 value={effectCount}
                                 onChange={(e) => setEffectCount(Number(e.target.value))}
-                                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
                             />
-                            <span className="text-xs text-gray-500">1回の反応で描画される数</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">1回の反応で描画される数</span>
                         </label>
                     </div>
                 </div>
             </div>
 
             {/* データ記録制御パネル */}
-            <div className="mt-6 w-full max-w-5xl p-4 bg-white rounded-lg border">
-                <h3 className="text-lg font-semibold text-gray-700 mb-3">データ記録[R]</h3>
+            <div className="mt-6 w-full max-w-5xl p-4 bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-3">データ記録[R]</h3>
                 <div className="flex items-center space-x-4">
                     <div className="flex items-center space-x-2">
                         <button
@@ -1567,16 +1567,16 @@ const PoseDetector = (): JSX.Element => {
                             {isRecording ? "記録停止" : "記録開始"}
                         </button>
                         <div
-                            className={`w-3 h-3 rounded-full ${isRecording ? "bg-red-500 animate-pulse" : "bg-gray-300"
+                            className={`w-3 h-3 rounded-full ${isRecording ? "bg-red-500 animate-pulse" : "bg-gray-300 dark:bg-gray-600"
                                 }`}
                         />
-                        <span className="text-sm text-gray-600">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
                             {isRecording ? "記録中..." : "記録待機"}
                         </span>
                     </div>
                     {recordedData.poses.length > 0 && !isRecording && (
                         <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-600">
+                            <span className="text-sm text-gray-600 dark:text-gray-400">
                                 記録されたポーズ数: {recordedData.poses.length}
                             </span>
                             <button
@@ -1589,7 +1589,7 @@ const PoseDetector = (): JSX.Element => {
                     )}
                 </div>
                 {isRecording && (
-                    <div className="mt-3 text-sm text-gray-600">
+                    <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
                         <p>• 0.25秒間隔でポーズデータが記録されています</p>
                         <p>• 現在のポーズ数: {recordedData.poses.length}</p>
                         <p>
@@ -1604,7 +1604,7 @@ const PoseDetector = (): JSX.Element => {
                     </div>
                 )}
                 {recordedData.poses.length > 0 && (
-                    <div className="mt-3 text-sm text-green-600">
+                    <div className="mt-3 text-sm text-green-600 dark:text-green-400">
                         <p>
                             ✓ 最新記録:{" "}
                             {recordedData.poses.length > 0
@@ -1620,22 +1620,22 @@ const PoseDetector = (): JSX.Element => {
             {/* メモ入力ダイアログ */}
             {showMemoDialog && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-                        <h3 className="text-lg font-semibold text-gray-700 mb-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+                        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">
                             データにメモを追加
                         </h3>
                         <div className="mb-4">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 メモ（任意）
                             </label>
                             <textarea
                                 value={memo}
                                 onChange={(e) => setMemo(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800"
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-700"
                                 rows={4}
                                 maxLength={500}
                             />
-                            <div className="text-right text-xs text-gray-500 mt-1">
+                            <div className="text-right text-xs text-gray-500 dark:text-gray-400 mt-1">
                                 {memo.length}/500文字
                             </div>
                         </div>
@@ -1645,7 +1645,7 @@ const PoseDetector = (): JSX.Element => {
                                     setShowMemoDialog(false);
                                     setMemo("");
                                 }}
-                                className="px-4 py-2 text-gray-700 bg-gray-200 hover:bg-gray-300 rounded-lg font-medium transition-colors"
+                                className="px-4 py-2 text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-lg font-medium transition-colors"
                             >
                                 キャンセル
                             </button>
