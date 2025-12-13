@@ -39,6 +39,7 @@ import {
   Sliders,
   FileJson,
   HelpCircle,
+  ExternalLink,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -48,6 +49,13 @@ type BlazePoseModelType = "lite" | "full" | "heavy";
 type DetectorType = "MoveNet" | "MediaPipe";
 type ProcessingMode = "CPU" | "GPU" | "WebGPU";
 type Point = { x: number; y: number };
+type MarkerConfig = {
+  rightHand: boolean;
+  leftHand: boolean;
+  rightFoot: boolean;
+  leftFoot: boolean;
+  face: boolean;
+};
 
 // --- Helper Objects ---
 const Matrix = {
@@ -89,7 +97,7 @@ const Matrix = {
 // --- Main Component ---
 const PoseDetector = (): JSX.Element => {
   // --- State: Logic ---
-  const [detectorType, setDetectorType] = useState<DetectorType>("MoveNet");
+  const [detectorType, setDetectorType] = useState<DetectorType>("MediaPipe");
   const [moveNetModelType, setMoveNetModelType] =
     useState<MoveNetModelType>("Lightning");
   const [blazePoseModelType, setBlazePoseModelType] =
@@ -115,7 +123,7 @@ const PoseDetector = (): JSX.Element => {
     useState<HTMLImageElement | null>(null);
   const [selectedEffect, setSelectedEffect] = useState<EffectType>("Normal");
   const [moveThreshold, setMoveThreshold] = useState<number>(5);
-  const [effectCount, setEffectCount] = useState<number>(10);
+  const [effectCount, setEffectCount] = useState<number>(5);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedData, setRecordedData] = useState<{
     startTime: number;
@@ -128,6 +136,13 @@ const PoseDetector = (): JSX.Element => {
   const [selectedSound, setSelectedSound] = useState<SoundList | null>(null);
   const [isRecordingVideo, setIsRecordingVideo] = useState(true);
   const [includePoseInVideo, setIncludePoseInVideo] = useState(true);
+  const [selectedMarkers, setSelectedMarkers] = useState<MarkerConfig>({
+    rightHand: true,
+    leftHand: true,
+    rightFoot: false,
+    leftFoot: false,
+    face: false,
+  });
 
 
   // --- State: UI ---
@@ -178,10 +193,15 @@ const PoseDetector = (): JSX.Element => {
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
   const adjacentPairsRef = useRef<[number, number][] | null>(null);
   const particlesRef = useRef<Particle[]>([]);
-  const lastHandPositionsRef = useRef<{
-    left: Point | null;
-    right: Point | null;
-  }>({ left: null, right: null });
+  const lastMarkerPositionsRef = useRef<{
+    [key: string]: Point | null;
+  }>({
+    rightHand: null,
+    leftHand: null,
+    rightFoot: null,
+    leftFoot: null,
+    face: null,
+  });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const lastRecordTimeRef = useRef<number>(0);
@@ -213,6 +233,7 @@ const PoseDetector = (): JSX.Element => {
   const backgroundImageRef = useRef(backgroundImage);
   const detectorTypeRef = useRef(detectorType);
   const inputModeRef = useRef(inputMode);
+  const selectedMarkersRef = useRef(selectedMarkers);
   const handCanvasDimensionsRef = useRef({ width: 0, height: 0 });
 
   // --- Recording Refs for Closure Access ---
@@ -257,6 +278,183 @@ const PoseDetector = (): JSX.Element => {
   useEffect(() => {
     inputModeRef.current = inputMode;
   }, [inputMode]);
+  useEffect(() => {
+    selectedMarkersRef.current = selectedMarkers;
+  }, [selectedMarkers]);
+
+  // --- BroadcastChannel for Remote Control ---
+  useEffect(() => {
+    const channel = new BroadcastChannel("test20_settings_channel");
+
+    channel.onmessage = (event) => {
+      const { type, payload } = event.data;
+      if (type === "UPDATE_SETTING") {
+        const { key, value } = payload;
+        switch (key) {
+          case "selectedEffect":
+            setSelectedEffect(value);
+            break;
+          case "selectedBackground":
+            setSelectedBackground(value);
+            break;
+          case "selectedSound":
+            const s = Sounds.find((snd) => snd.name === value);
+            if (s) {
+              setSelectedSound(s);
+              changeSound(s);
+            } else if (value === "") {
+              setSelectedSound(null);
+            }
+            break;
+          case "effectCount":
+            setEffectCount(value);
+            break;
+          case "moveThreshold":
+            setMoveThreshold(value);
+            break;
+          case "detectorType":
+            setDetectorType(value);
+            break;
+          case "moveNetModelType":
+            setMoveNetModelType(value);
+            break;
+          case "blazePoseModelType":
+            setBlazePoseModelType(value);
+            break;
+          case "inputMode":
+            setInputMode(value);
+            break;
+          case "selectedCameraId":
+            setSelectedCameraId(value);
+            break;
+          case "isRecordingVideo":
+            setIsRecordingVideo(value);
+            break;
+          case "includePoseInVideo":
+            setIncludePoseInVideo(value);
+            break;
+          case "selectedMarkers":
+            setSelectedMarkers(value);
+            break;
+        }
+      } else if (type === "START_RECORDING") {
+        handlersRef.current.startRecording();
+      } else if (type === "STOP_RECORDING") {
+        handlersRef.current.stopRecording();
+      } else if (type === "SAVE_AND_DOWNLOAD") {
+        handlersRef.current.handleDownload(payload?.memo);
+      } else if (type === "SYNC_REQUEST") {
+        channel.postMessage({
+          type: "SYNC_RESPONSE",
+          payload: {
+            selectedEffect: selectedEffectRef.current,
+            selectedBackground: backgroundImageRef.current ? (selectedBackground || "") : "", // simpler to just use state, but using ref for consistency if needed. actually state is better for these values.
+            // Rethink: inside useEffect, we have closure over state? No, this useEffect has NO dependency locally to avoid re-subscribing too often, 
+            // BUT we need current state access.
+            // We should use the REFS we created for optimization, or create refs for the ones missing.
+            // Or better: use a functional state update or just refs.
+            // Let's check which refs exist:
+            // selectedEffectRef, moveThresholdRef, effectCountRef, detectorTypeRef, inputModeRef.
+            // Missing refs for: selectedBackground, selectedSound, moveNetModelType, blazePoseModelType, selectedCameraId.
+
+            // To properly handle SYNC_REQUEST without adding all states to dependency array (which would re-create channel constantly),
+            // let's use a mutable ref that holds "all current settings" or just access the existing refs.
+            // I will use the existing refs and just rely on state for the ones that don't change often or accept that SYNC might be slightly stale if I don't add dependencies? 
+            // Actually, the cleanest way is to use a ref that tracks the *entire* state object for sync purposes, OR add dependencies.
+            // If I add dependencies, the channel reconnects. It's cheap. Safe to add dependencies.
+            // WAIT, if I add dependencies, I loop: receive msg -> update state -> effect trigger -> new channel -> ...
+            // Recreating channel is fine.
+          }
+        });
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, []); // Keep empty array to avoid re-binding.
+
+  // We need a way to access latest values for SYNC_RESPONSE without re-binding.
+  // I will create a ref that always holds the current state for all settings.
+  const allSettingsRef = useRef({
+    selectedEffect,
+    selectedBackground,
+    selectedSound,
+    effectCount,
+    moveThreshold,
+    detectorType,
+    moveNetModelType,
+    blazePoseModelType,
+    inputMode,
+    selectedCameraId,
+    isRecordingVideo,
+    includePoseInVideo,
+    selectedMarkers,
+  });
+
+  const handlersRef = useRef({
+    startRecording: () => { },
+    stopRecording: () => { },
+    handleDownload: (memo?: string) => { }
+  });
+
+  useEffect(() => {
+    handlersRef.current = {
+      startRecording,
+      stopRecording,
+      handleDownload
+    };
+  });
+
+  useEffect(() => {
+    allSettingsRef.current = {
+      selectedEffect,
+      selectedBackground,
+      selectedSound,
+      effectCount,
+      moveThreshold,
+      detectorType,
+      moveNetModelType,
+      blazePoseModelType,
+      inputMode,
+      selectedCameraId,
+      isRecordingVideo,
+      includePoseInVideo,
+      selectedMarkers,
+    };
+  }, [
+    selectedEffect,
+    selectedBackground,
+    selectedSound,
+    effectCount,
+    moveThreshold,
+    detectorType,
+    moveNetModelType,
+    blazePoseModelType,
+    inputMode,
+    selectedCameraId,
+    isRecordingVideo,
+    includePoseInVideo,
+    selectedMarkers,
+  ]);
+
+  // Now the specific SYNC channel effect
+  useEffect(() => {
+    const channel = new BroadcastChannel("test20_settings_channel");
+    channel.onmessage = (event) => {
+      if (event.data.type === "SYNC_REQUEST") {
+        channel.postMessage({
+          type: "SYNC_RESPONSE",
+          payload: {
+            ...allSettingsRef.current,
+            selectedSound: allSettingsRef.current.selectedSound?.name || ""
+          }
+        });
+      }
+    };
+    return () => channel.close();
+  }, []);
+
 
   // --- Memoized Dimensions ---
   const handCanvasDimensions = useMemo(() => {
@@ -415,6 +613,7 @@ const PoseDetector = (): JSX.Element => {
       const currentDimensions = handCanvasDimensionsRef.current;
       const currentBackgroundImage = backgroundImageRef.current;
       const currentDetectorType = detectorTypeRef.current;
+      const currentSelectedMarkers = selectedMarkersRef.current;
 
       if (!video || !canvas || !handCanvas || video.videoWidth === 0) return;
 
@@ -531,45 +730,58 @@ const PoseDetector = (): JSX.Element => {
       const scaleY = handCanvas.height / srcHeight;
 
       // --- Hand Tracking Trigger ---
-      let isLeftHandVisible = false;
-      let isRightHandVisible = false;
 
       const scaledThreshold = currentMoveThreshold * ((scaleX + scaleY) / 2);
 
       for (const pose of rawPoses) {
         if (!pose.keypoints) continue;
-        const leftWristIdx = currentDetectorType === "MoveNet" ? 9 : 15;
-        const rightWristIdx = currentDetectorType === "MoveNet" ? 10 : 16;
-        const leftWrist = pose.keypoints[leftWristIdx];
-        const rightWrist = pose.keypoints[rightWristIdx];
 
-        if (leftWrist?.score && leftWrist.score > 0.5) {
-          isLeftHandVisible = true;
-          const pt = { x: leftWrist.x * scaleX, y: leftWrist.y * scaleY };
-          if (lastHandPositionsRef.current.left) {
-            const dist = Math.hypot(
-              pt.x - lastHandPositionsRef.current.left.x,
-              pt.y - lastHandPositionsRef.current.left.y
-            );
-            if (dist > scaledThreshold) emitParticles(pt.x, pt.y, dist);
-          }
-          lastHandPositionsRef.current.left = pt;
+        let leftWristIdx: number, rightWristIdx: number, noseIdx: number, leftAnkleIdx: number, rightAnkleIdx: number;
+
+        if (currentDetectorType === "MoveNet") {
+          noseIdx = 0;
+          leftWristIdx = 9;
+          rightWristIdx = 10;
+          leftAnkleIdx = 15;
+          rightAnkleIdx = 16;
+        } else {
+          // BlazePose
+          noseIdx = 0;
+          leftWristIdx = 15;
+          rightWristIdx = 16;
+          leftAnkleIdx = 27;
+          rightAnkleIdx = 28;
         }
-        if (rightWrist?.score && rightWrist.score > 0.5) {
-          isRightHandVisible = true;
-          const pt = { x: rightWrist.x * scaleX, y: rightWrist.y * scaleY };
-          if (lastHandPositionsRef.current.right) {
-            const dist = Math.hypot(
-              pt.x - lastHandPositionsRef.current.right.x,
-              pt.y - lastHandPositionsRef.current.right.y
-            );
-            if (dist > scaledThreshold) emitParticles(pt.x, pt.y, dist);
+
+        const checkAndEmit = (idx: number, key: string, isEnabled: boolean) => {
+          // Reset if disabled
+          if (!isEnabled) {
+            lastMarkerPositionsRef.current[key] = null;
+            return;
           }
-          lastHandPositionsRef.current.right = pt;
-        }
+
+          const kp = pose.keypoints[idx];
+          if (kp?.score && kp.score > 0.5) {
+            const pt = { x: kp.x * scaleX, y: kp.y * scaleY };
+            const lastPos = lastMarkerPositionsRef.current[key];
+            if (lastPos) {
+              const dist = Math.hypot(pt.x - lastPos.x, pt.y - lastPos.y);
+              if (dist > scaledThreshold) {
+                emitParticles(pt.x, pt.y, dist);
+              }
+            }
+            lastMarkerPositionsRef.current[key] = pt;
+          } else {
+            lastMarkerPositionsRef.current[key] = null;
+          }
+        };
+
+        checkAndEmit(rightWristIdx, 'rightHand', currentSelectedMarkers.rightHand);
+        checkAndEmit(leftWristIdx, 'leftHand', currentSelectedMarkers.leftHand);
+        checkAndEmit(rightAnkleIdx, 'rightFoot', currentSelectedMarkers.rightFoot);
+        checkAndEmit(leftAnkleIdx, 'leftFoot', currentSelectedMarkers.leftFoot);
+        checkAndEmit(noseIdx, 'face', currentSelectedMarkers.face);
       }
-      if (!isLeftHandVisible) lastHandPositionsRef.current.left = null;
-      if (!isRightHandVisible) lastHandPositionsRef.current.right = null;
     },
     [drawInteractiveOverlay]
   );
@@ -1059,7 +1271,8 @@ const PoseDetector = (): JSX.Element => {
   const getPointerPos = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const video = videoRef.current;
-    if (!video) return null;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+
     const clientX =
       "touches" in e.nativeEvent
         ? e.nativeEvent.touches[0].clientX
@@ -1068,11 +1281,50 @@ const PoseDetector = (): JSX.Element => {
       "touches" in e.nativeEvent
         ? e.nativeEvent.touches[0].clientY
         : (e as React.MouseEvent).clientY;
-    const scaleX = rect.width / video.videoWidth;
-    const scaleY = rect.height / video.videoHeight;
+
+    // Calculate the actual displayed dimensions of the video (object-contain)
+    const videoRatio = video.videoWidth / video.videoHeight;
+    const containerRatio = rect.width / rect.height;
+
+    let renderWidth, renderHeight, offsetX, offsetY;
+
+    if (containerRatio > videoRatio) {
+      // Container is wider than video - black bars on sides
+      renderHeight = rect.height;
+      renderWidth = rect.height * videoRatio;
+      offsetX = (rect.width - renderWidth) / 2;
+      offsetY = 0;
+    } else {
+      // Container is taller than video - black bars on top/bottom
+      renderWidth = rect.width;
+      renderHeight = rect.width / videoRatio;
+      offsetX = 0;
+      offsetY = (rect.height - renderHeight) / 2;
+    }
+
+    // Coordinates relative to the container
+    const relX = clientX - rect.left;
+    const relY = clientY - rect.top;
+
+    // Map to normalized video coordinates (0..1)
+    // Note: The video and canvas are flipped horizontally via CSS (scaleX(-1))
+    // So visual Left (0) corresponds to logical Right (1).
+    // We enforce 0..1 clamping to avoid dragging outside the video area
+    let normX = (relX - offsetX) / renderWidth;
+    let normY = (relY - offsetY) / renderHeight;
+
+    // Check if click is inside the video area (optional, but good for UX)
+    // For dragging, we might want to allow slight overshoot, but for starting drag, likely inside.
+    // Let's just clamp for robustness so points don't fly off to infinity if dragged into black bars.
+    normX = Math.max(0, Math.min(1, normX));
+    normY = Math.max(0, Math.min(1, normY));
+
+    // Apply Flip
+    normX = 1 - normX;
+
     return {
-      x: video.videoWidth - (clientX - rect.left) / scaleX,
-      y: (clientY - rect.top) / scaleY,
+      x: normX * video.videoWidth,
+      y: normY * video.videoHeight,
     };
   };
 
@@ -1098,9 +1350,9 @@ const PoseDetector = (): JSX.Element => {
       );
   };
 
-  const handleDownload = () => {
+  const handleDownload = (memoOverride?: string) => {
     // Download JSON
-    const data = { ...recordedData, memo: memo.trim() || "No Memo" };
+    const data = { ...recordedData, memo: (memoOverride ?? memo).trim() || "No Memo" };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
@@ -1132,6 +1384,10 @@ const PoseDetector = (): JSX.Element => {
 
   const startRecording = () => {
     setIsRecording(true);
+    const channel = new BroadcastChannel("test20_settings_channel");
+    channel.postMessage({ type: "RECORDING_STARTED", payload: { startTime: Date.now() } });
+    channel.close();
+
     recordingStartTimeRef.current = Date.now();
     lastRecordTimeRef.current = Date.now();
     setRecordedData({
@@ -1172,6 +1428,9 @@ const PoseDetector = (): JSX.Element => {
 
   const stopRecording = () => {
     setIsRecording(false);
+    const channel = new BroadcastChannel("test20_settings_channel");
+    channel.postMessage({ type: "RECORDING_STOPPED" });
+    channel.close();
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
@@ -1229,6 +1488,19 @@ const PoseDetector = (): JSX.Element => {
           >
             {status}
           </span>
+          <button
+            onClick={() =>
+              window.open(
+                "/kennkyu/test20/controller",
+                "Test20Controller",
+                "width=400,height=800"
+              )
+            }
+            className="p-2 hover:bg-slate-800 rounded-md transition-colors text-slate-400 hover:text-white"
+            title="Open Controller"
+          >
+            <ExternalLink size={20} />
+          </button>
           <button
             onClick={() => setShowSidebar(!showSidebar)}
             className="p-2 hover:bg-slate-800 rounded-md transition-colors"
@@ -1438,7 +1710,7 @@ const PoseDetector = (): JSX.Element => {
                         <input
                           type="range"
                           min="1"
-                          max="100"
+                          max="20"
                           value={effectCount}
                           onChange={(e) =>
                             setEffectCount(Number(e.target.value))
@@ -1457,13 +1729,45 @@ const PoseDetector = (): JSX.Element => {
                         <input
                           type="range"
                           min="1"
-                          max="50"
+                          max="10"
                           value={moveThreshold}
                           onChange={(e) =>
                             setMoveThreshold(Number(e.target.value))
                           }
                           className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                         />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Marker Section */}
+                <SectionHeader id="markers" label="マーカー設定" icon={Sliders} />
+                {activeSections.includes("markers") && (
+                  <div className="p-3 bg-slate-900/30 rounded-lg space-y-4 mb-2">
+                    <div className="space-y-2">
+                      <HelpLabel label="有効なマーカー" description="パーティクルを発生させる部位を選択します。" />
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { k: "face", l: "顔 (Face)" },
+                          { k: "rightHand", l: "右手 (R-Hand)" },
+                          { k: "leftHand", l: "左手 (L-Hand)" },
+                          { k: "rightFoot", l: "右足 (R-Foot)" },
+                          { k: "leftFoot", l: "左足 (L-Foot)" },
+                        ].map((item) => (
+                          <label key={item.k} className="flex items-center space-x-2 bg-slate-800 p-2 rounded-lg cursor-pointer hover:bg-slate-750 transition">
+                            <input
+                              type="checkbox"
+                              checked={selectedMarkers[item.k as keyof MarkerConfig]}
+                              onChange={(e) => {
+                                const newMarkers = { ...selectedMarkers, [item.k]: e.target.checked };
+                                setSelectedMarkers(newMarkers);
+                              }}
+                              className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-slate-300">{item.l}</span>
+                          </label>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -1705,7 +2009,7 @@ Heavy: 最高精度。`
                   Cancel
                 </button>
                 <button
-                  onClick={handleDownload}
+                  onClick={() => handleDownload()}
                   className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm flex items-center justify-center space-x-2"
                 >
                   <Save size={16} />

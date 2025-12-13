@@ -249,9 +249,9 @@ export const researchData: Research[] = [
       {
         id: 4,
         title:
-          "test20: MediaPipeのPoseLandmarkerを使用するように改善。uiを改善。",
+          "test20: uiを改善。様々な機能の実装",
         journal:
-          "test19にMediaPipeのPoseLandmarkerを使用するように改善。uiを改善。",
+          "test19にMediaPipeのPoseLandmarkerを使用するように改善。uiを改善。別タブから操作できるように。パーティクルを表示するマーカー位置を設定できるように。",
         year: 2025,
         url: "test20",
       },
