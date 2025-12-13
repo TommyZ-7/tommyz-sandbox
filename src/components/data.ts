@@ -246,6 +246,15 @@ export const researchData: Research[] = [
         year: 2025,
         url: "test19",
       },
+      {
+        id: 4,
+        title:
+          "test20: MediaPipeのPoseLandmarkerを使用するように改善。uiを改善。",
+        journal:
+          "test19にMediaPipeのPoseLandmarkerを使用するように改善。uiを改善。",
+        year: 2025,
+        url: "test20",
+      },
 
     ],
   },
