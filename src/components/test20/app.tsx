@@ -1496,10 +1496,11 @@ const PoseDetector = (): JSX.Element => {
                 "width=400,height=800"
               )
             }
-            className="p-2 hover:bg-slate-800 rounded-md transition-colors text-slate-400 hover:text-white"
+            className="p-2 hover:bg-slate-800 rounded-md transition-colors text-slate-400 hover:text-white flex items-center space-x-2"
             title="Open Controller"
           >
             <ExternalLink size={20} />
+            <span className="text-sm font-medium">コントローラー</span>
           </button>
           <button
             onClick={() => setShowSidebar(!showSidebar)}
