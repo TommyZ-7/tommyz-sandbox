@@ -283,97 +283,7 @@ const PoseDetector = (): JSX.Element => {
     selectedMarkersRef.current = selectedMarkers;
   }, [selectedMarkers]);
 
-  // --- BroadcastChannel for Remote Control ---
-  useEffect(() => {
-    const channel = new BroadcastChannel("test20_settings_channel");
 
-    channel.onmessage = (event) => {
-      const { type, payload } = event.data;
-      if (type === "UPDATE_SETTING") {
-        const { key, value } = payload;
-        switch (key) {
-          case "selectedEffect":
-            setSelectedEffect(value);
-            break;
-          case "selectedBackground":
-            setSelectedBackground(value);
-            break;
-          case "selectedSound":
-            const s = Sounds.find((snd) => snd.name === value);
-            if (s) {
-              setSelectedSound(s);
-              changeSound(s);
-            } else if (value === "") {
-              setSelectedSound(null);
-            }
-            break;
-          case "effectCount":
-            setEffectCount(value);
-            break;
-          case "moveThreshold":
-            setMoveThreshold(value);
-            break;
-          case "detectorType":
-            setDetectorType(value);
-            break;
-          case "moveNetModelType":
-            setMoveNetModelType(value);
-            break;
-          case "blazePoseModelType":
-            setBlazePoseModelType(value);
-            break;
-          case "inputMode":
-            setInputMode(value);
-            break;
-          case "selectedCameraId":
-            setSelectedCameraId(value);
-            break;
-          case "isRecordingVideo":
-            setIsRecordingVideo(value);
-            break;
-          case "includePoseInVideo":
-            setIncludePoseInVideo(value);
-            break;
-          case "selectedMarkers":
-            setSelectedMarkers(value);
-            break;
-        }
-      } else if (type === "START_RECORDING") {
-        handlersRef.current.startRecording();
-      } else if (type === "STOP_RECORDING") {
-        handlersRef.current.stopRecording();
-      } else if (type === "SAVE_AND_DOWNLOAD") {
-        handlersRef.current.handleDownload(payload?.memo);
-      } else if (type === "SYNC_REQUEST") {
-        channel.postMessage({
-          type: "SYNC_RESPONSE",
-          payload: {
-            selectedEffect: selectedEffectRef.current,
-            selectedBackground: backgroundImageRef.current ? (selectedBackground || "") : "", // simpler to just use state, but using ref for consistency if needed. actually state is better for these values.
-            // Rethink: inside useEffect, we have closure over state? No, this useEffect has NO dependency locally to avoid re-subscribing too often, 
-            // BUT we need current state access.
-            // We should use the REFS we created for optimization, or create refs for the ones missing.
-            // Or better: use a functional state update or just refs.
-            // Let's check which refs exist:
-            // selectedEffectRef, moveThresholdRef, effectCountRef, detectorTypeRef, inputModeRef.
-            // Missing refs for: selectedBackground, selectedSound, moveNetModelType, blazePoseModelType, selectedCameraId.
-
-            // To properly handle SYNC_REQUEST without adding all states to dependency array (which would re-create channel constantly),
-            // let's use a mutable ref that holds "all current settings" or just access the existing refs.
-            // I will use the existing refs and just rely on state for the ones that don't change often or accept that SYNC might be slightly stale if I don't add dependencies? 
-            // Actually, the cleanest way is to use a ref that tracks the *entire* state object for sync purposes, OR add dependencies.
-            // If I add dependencies, the channel reconnects. It's cheap. Safe to add dependencies.
-            // WAIT, if I add dependencies, I loop: receive msg -> update state -> effect trigger -> new channel -> ...
-            // Recreating channel is fine.
-          }
-        });
-      }
-    };
-
-    return () => {
-      channel.close();
-    };
-  }, []); // Keep empty array to avoid re-binding.
 
   // We need a way to access latest values for SYNC_RESPONSE without re-binding.
   // I will create a ref that always holds the current state for all settings.
@@ -439,22 +349,7 @@ const PoseDetector = (): JSX.Element => {
     selectedMarkers,
   ]);
 
-  // Now the specific SYNC channel effect
-  useEffect(() => {
-    const channel = new BroadcastChannel("test20_settings_channel");
-    channel.onmessage = (event) => {
-      if (event.data.type === "SYNC_REQUEST") {
-        channel.postMessage({
-          type: "SYNC_RESPONSE",
-          payload: {
-            ...allSettingsRef.current,
-            selectedSound: allSettingsRef.current.selectedSound?.name || ""
-          }
-        });
-      }
-    };
-    return () => channel.close();
-  }, []);
+
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -1474,84 +1369,61 @@ const PoseDetector = (): JSX.Element => {
   // --- Remote Control (BroadcastChannel) ---
   useEffect(() => {
     const channel = new BroadcastChannel("test20_settings_channel");
-    channel.onmessage = (event) => {
+
+    const handleMessage = (event: MessageEvent) => {
       const { type, payload } = event.data;
 
       if (type === "SYNC_REQUEST") {
         channel.postMessage({
           type: "SYNC_RESPONSE",
           payload: {
-            selectedEffect,
-            selectedBackground: BackgroundImages.find(i => i.path === (backgroundImage?.src || ""))?.path || BackgroundImages[0].path, // Best effort
-            selectedSound: selectedSound?.name,
-            effectCount,
-            moveThreshold,
-            detectorType,
-            moveNetModelType,
-            blazePoseModelType,
-            selectedCameraId,
-            isRecordingVideo,
-            includePoseInVideo,
-            skipMemo,
-            selectedMarkers,
+            ...allSettingsRef.current,
+            selectedSound: allSettingsRef.current.selectedSound?.name || "",
+            selectedBackground: allSettingsRef.current.selectedBackground || "",
           },
         });
       } else if (type === "START_RECORDING") {
-        if (!isRecording) startRecording();
+        handlersRef.current.startRecording();
       } else if (type === "STOP_RECORDING") {
-        if (isRecording) stopRecording();
+        handlersRef.current.stopRecording();
       } else if (type === "SAVE_AND_DOWNLOAD") {
-        handleDownload(payload.memo);
+        handlersRef.current.handleDownload(payload?.memo);
       } else if (type === "UPDATE_SETTING") {
         const { key, value } = payload;
         // Map settings
-        if (key === "selectedEffect") setSelectedEffect(value);
-        if (key === "selectedBackground") {
-          const img = new Image();
-          img.src = value;
-          img.onload = () => setBackgroundImage(img);
+        switch (key) {
+          case "selectedEffect": setSelectedEffect(value); break;
+          case "selectedBackground": setSelectedBackground(value); break;
+          case "selectedSound":
+            const s = Sounds.find((snd) => snd.name === value);
+            if (s) {
+              setSelectedSound(s);
+              changeSound(s);
+            } else if (value === "") {
+              setSelectedSound(null);
+            }
+            break;
+          case "effectCount": setEffectCount(value); break;
+          case "moveThreshold": setMoveThreshold(value); break;
+          case "detectorType": setDetectorType(value); break;
+          case "moveNetModelType": setMoveNetModelType(value); break;
+          case "blazePoseModelType": setBlazePoseModelType(value); break;
+          case "inputMode": setInputMode(value); break;
+          case "selectedCameraId": setSelectedCameraId(value); break;
+          case "isRecordingVideo": setIsRecordingVideo(value); break;
+          case "includePoseInVideo": setIncludePoseInVideo(value); break;
+          case "skipMemo": setSkipMemo(value); break;
+          case "selectedMarkers": setSelectedMarkers(value); break;
         }
-        if (key === "selectedSound") {
-          const s = Sounds.find((snd) => snd.name === value);
-          if (s) {
-            setSelectedSound(s);
-            // changeSound(s); // Optional: play sound?
-          }
-        }
-        if (key === "effectCount") setEffectCount(value);
-        if (key === "moveThreshold") setMoveThreshold(value);
-        if (key === "detectorType") setDetectorType(value);
-        if (key === "moveNetModelType") setMoveNetModelType(value);
-        if (key === "blazePoseModelType") setBlazePoseModelType(value);
-        if (key === "inputMode") setInputMode(value);
-        if (key === "selectedCameraId") setSelectedCameraId(value);
-        if (key === "isRecordingVideo") setIsRecordingVideo(value);
-        if (key === "includePoseInVideo") setIncludePoseInVideo(value);
-        if (key === "skipMemo") setSkipMemo(value);
-        if (key === "selectedMarkers") setSelectedMarkers(value);
       }
     };
 
-    return () => channel.close();
-  }, [
-    isRecording, // Needed for start/stop checks
-    selectedEffect,
-    backgroundImage,
-    selectedSound,
-    effectCount,
-    moveThreshold,
-    detectorType,
-    moveNetModelType,
-    blazePoseModelType,
-    selectedCameraId,
-    isRecordingVideo,
-    includePoseInVideo,
-    skipMemo,
-    selectedMarkers,
-    startRecording, // Dep
-    stopRecording, // Dep
-    handleDownload // Dep
-  ]);
+    channel.onmessage = handleMessage;
+
+    return () => {
+      channel.close();
+    };
+  }, []); // Empty dependency array - using refs for state access
 
   // --- UI Components ---
   const SectionHeader = ({
