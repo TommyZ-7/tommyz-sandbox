@@ -59,6 +59,7 @@ export default function ControllerPage() {
     const [memo, setMemo] = useState("");
     const [isRecordingVideo, setIsRecordingVideo] = useState(false);
     const [includePoseInVideo, setIncludePoseInVideo] = useState(false);
+    const [skipMemo, setSkipMemo] = useState(false);
 
     const channelRef = useRef<BroadcastChannel | null>(null);
 
@@ -83,7 +84,9 @@ export default function ControllerPage() {
                 if (p.blazePoseModelType) setBlazePoseModelType(p.blazePoseModelType);
                 if (p.selectedCameraId !== undefined) setSelectedCameraId(p.selectedCameraId);
                 if (p.isRecordingVideo !== undefined) setIsRecordingVideo(p.isRecordingVideo);
+                if (p.isRecordingVideo !== undefined) setIsRecordingVideo(p.isRecordingVideo);
                 if (p.includePoseInVideo !== undefined) setIncludePoseInVideo(p.includePoseInVideo);
+                if (p.skipMemo !== undefined) setSkipMemo(p.skipMemo);
                 if (p.selectedMarkers) setSelectedMarkers(p.selectedMarkers);
             } else if (event.data.type === "RECORDING_STARTED") {
                 setIsRecording(true);
@@ -112,6 +115,32 @@ export default function ControllerPage() {
         };
     }, []);
 
+    // --- Keyboard Shortcuts ---
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Ignore if typing in an input or textarea
+            if (
+                document.activeElement?.tagName === "INPUT" ||
+                document.activeElement?.tagName === "TEXTAREA"
+            ) {
+                return;
+            }
+
+            if (e.key.toLowerCase() === "r") {
+                if (showMemoInput) return; // Don't toggle if memo input is shown
+
+                if (isRecording) {
+                    channelRef.current?.postMessage({ type: "STOP_RECORDING" });
+                } else {
+                    channelRef.current?.postMessage({ type: "START_RECORDING" });
+                }
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [isRecording, showMemoInput]);
+
     // --- Helper to send updates ---
     const updateSetting = (key: string, value: any) => {
         channelRef.current?.postMessage({
@@ -128,7 +157,7 @@ export default function ControllerPage() {
         </div>
     );
 
-    const SectionHeader = ({ id, label, icon: Icon }: { id: string; label: string; icon: any }) => {
+    const SectionHeader = ({ id, label, icon: Icon, badge }: { id: string; label: string; icon: any; badge?: React.ReactNode }) => {
         const isActive = activeSections.includes(id);
         return (
             <button
@@ -144,6 +173,7 @@ export default function ControllerPage() {
                 <div className="flex items-center space-x-2 text-sm font-semibold text-slate-200">
                     <Icon size={18} className={isActive ? "text-blue-400" : "text-slate-400"} />
                     <span>{label}</span>
+                    {badge && <div className="ml-2">{badge}</div>}
                 </div>
                 {isActive ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             </button>
@@ -413,7 +443,22 @@ export default function ControllerPage() {
                 )}
 
                 {/* Recording Section */}
-                <SectionHeader id="rec" label="記録制御" icon={Mic} />
+                <SectionHeader
+                    id="rec"
+                    label="記録(R)"
+                    icon={Mic}
+                    badge={
+                        isRecording ? (
+                            <div className="flex items-center gap-1">
+                                <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                                </span>
+                                <span className="text-[10px] font-bold text-red-400 tracking-wider">REC</span>
+                            </div>
+                        ) : null
+                    }
+                />
                 {activeSections.includes("rec") && (
                     <div className="p-3 bg-slate-900/30 rounded-lg space-y-4 mb-2 border border-slate-800">
                         {/* Recording Settings */}
@@ -442,6 +487,18 @@ export default function ControllerPage() {
                                     className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
                                 />
                                 <span className="text-xs text-slate-300">姿勢マーカーを含める</span>
+                            </label>
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={skipMemo}
+                                    onChange={(e) => {
+                                        setSkipMemo(e.target.checked);
+                                        updateSetting("skipMemo", e.target.checked);
+                                    }}
+                                    className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-slate-300">メモなし即時保存</span>
                             </label>
                         </div>
 

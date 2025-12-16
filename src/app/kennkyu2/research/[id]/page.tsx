@@ -108,6 +108,9 @@ export default function ResearchDetailPage({ params }: DetailPageProps) {
             ))}
           </div>
         </motion.div>
+        <br />
+        <br />
+        <br />
       </div>
     </>
   );

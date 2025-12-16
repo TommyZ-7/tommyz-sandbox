@@ -136,6 +136,7 @@ const PoseDetector = (): JSX.Element => {
   const [selectedSound, setSelectedSound] = useState<SoundList | null>(null);
   const [isRecordingVideo, setIsRecordingVideo] = useState(true);
   const [includePoseInVideo, setIncludePoseInVideo] = useState(true);
+  const [skipMemo, setSkipMemo] = useState(false);
   const [selectedMarkers, setSelectedMarkers] = useState<MarkerConfig>({
     rightHand: true,
     leftHand: true,
@@ -453,6 +454,32 @@ const PoseDetector = (): JSX.Element => {
       }
     };
     return () => channel.close();
+  }, []);
+
+  // --- Keyboard Shortcuts ---
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if typing in an input or textarea
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+
+      if (event.key.toLowerCase() === "r") {
+        if (isRecordingRef.current) {
+          handlersRef.current.stopRecording();
+        } else {
+          handlersRef.current.startRecording();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
 
@@ -813,12 +840,9 @@ const PoseDetector = (): JSX.Element => {
 
       // 2. Draw Pose Overlay if enabled
       if (includePoseInVideoRef.current) {
-        // We need to re-transform keypoints for the raw video frame?
-        // Actually, transformedPoses are already transformed to "un-homographied" space if I recall correctly?
-        // Let's check getHomography logic.
-        // The `transformedPoses` in `drawResults` seem to be adjusted for the "Input View" which is the raw video view?
-        // The code says: "Draw Skeleton on Input View (Transformed back to original view)"
-        // So `transformedPoses` should be correct for the raw video frame.
+        ctx.save();
+        ctx.scale(-1, 1);
+        ctx.translate(-recCanvas.width, 0);
 
         for (const pose of transformedPoses) {
           if (pose.keypoints) {
@@ -826,6 +850,7 @@ const PoseDetector = (): JSX.Element => {
             drawSkeleton(pose.keypoints, 0.5, ctx);
           }
         }
+        ctx.restore();
       }
     },
     []
@@ -1431,20 +1456,114 @@ const PoseDetector = (): JSX.Element => {
     const channel = new BroadcastChannel("test20_settings_channel");
     channel.postMessage({ type: "RECORDING_STOPPED" });
     channel.close();
+
+    const finalize = () => {
+      if (skipMemo) {
+        handleDownload();
+      }
+    };
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.onstop = finalize;
       mediaRecorderRef.current.stop();
+    } else {
+      finalize();
     }
   };
+
+  // --- Remote Control (BroadcastChannel) ---
+  useEffect(() => {
+    const channel = new BroadcastChannel("test20_settings_channel");
+    channel.onmessage = (event) => {
+      const { type, payload } = event.data;
+
+      if (type === "SYNC_REQUEST") {
+        channel.postMessage({
+          type: "SYNC_RESPONSE",
+          payload: {
+            selectedEffect,
+            selectedBackground: BackgroundImages.find(i => i.path === (backgroundImage?.src || ""))?.path || BackgroundImages[0].path, // Best effort
+            selectedSound: selectedSound?.name,
+            effectCount,
+            moveThreshold,
+            detectorType,
+            moveNetModelType,
+            blazePoseModelType,
+            selectedCameraId,
+            isRecordingVideo,
+            includePoseInVideo,
+            skipMemo,
+            selectedMarkers,
+          },
+        });
+      } else if (type === "START_RECORDING") {
+        if (!isRecording) startRecording();
+      } else if (type === "STOP_RECORDING") {
+        if (isRecording) stopRecording();
+      } else if (type === "SAVE_AND_DOWNLOAD") {
+        handleDownload(payload.memo);
+      } else if (type === "UPDATE_SETTING") {
+        const { key, value } = payload;
+        // Map settings
+        if (key === "selectedEffect") setSelectedEffect(value);
+        if (key === "selectedBackground") {
+          const img = new Image();
+          img.src = value;
+          img.onload = () => setBackgroundImage(img);
+        }
+        if (key === "selectedSound") {
+          const s = Sounds.find((snd) => snd.name === value);
+          if (s) {
+            setSelectedSound(s);
+            // changeSound(s); // Optional: play sound?
+          }
+        }
+        if (key === "effectCount") setEffectCount(value);
+        if (key === "moveThreshold") setMoveThreshold(value);
+        if (key === "detectorType") setDetectorType(value);
+        if (key === "moveNetModelType") setMoveNetModelType(value);
+        if (key === "blazePoseModelType") setBlazePoseModelType(value);
+        if (key === "inputMode") setInputMode(value);
+        if (key === "selectedCameraId") setSelectedCameraId(value);
+        if (key === "isRecordingVideo") setIsRecordingVideo(value);
+        if (key === "includePoseInVideo") setIncludePoseInVideo(value);
+        if (key === "skipMemo") setSkipMemo(value);
+        if (key === "selectedMarkers") setSelectedMarkers(value);
+      }
+    };
+
+    return () => channel.close();
+  }, [
+    isRecording, // Needed for start/stop checks
+    selectedEffect,
+    backgroundImage,
+    selectedSound,
+    effectCount,
+    moveThreshold,
+    detectorType,
+    moveNetModelType,
+    blazePoseModelType,
+    selectedCameraId,
+    isRecordingVideo,
+    includePoseInVideo,
+    skipMemo,
+    selectedMarkers,
+    startRecording, // Dep
+    stopRecording, // Dep
+    handleDownload // Dep
+  ]);
 
   // --- UI Components ---
   const SectionHeader = ({
     id,
     label,
     icon: Icon,
+    badge,
   }: {
     id: string;
     label: string;
     icon: any;
+    badge?: React.ReactNode;
   }) => {
     const isActive = activeSections.includes(id);
     return (
@@ -1464,6 +1583,7 @@ const PoseDetector = (): JSX.Element => {
         <div className="flex items-center space-x-2 text-sm font-semibold text-slate-200">
           <Icon size={18} className={isActive ? "text-blue-400" : "text-slate-400"} />
           <span>{label}</span>
+          {badge && <div className="ml-2">{badge}</div>}
         </div>
         {isActive ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
       </button>
@@ -1472,7 +1592,8 @@ const PoseDetector = (): JSX.Element => {
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-slate-200 font-sans overflow-hidden">
-      {/* --- Header --- */}
+      {/* ... Header ... */}
+
       <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
         <div className="flex items-center space-x-4">
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
@@ -1909,7 +2030,19 @@ Heavy: 最高精度。`
                 )}
 
                 {/* Recording Section */}
-                <SectionHeader id="rec" label="記録" icon={Mic} />
+                <SectionHeader
+                  id="rec"
+                  label="記録(R)"
+                  icon={Mic}
+                  badge={
+                    isRecording ? (
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                      </span>
+                    ) : null
+                  }
+                />
                 {activeSections.includes("rec") && (
                   <div className="p-3 bg-slate-900/30 rounded-lg space-y-4 mb-2">
                     {/* Recording Settings */}
@@ -1932,6 +2065,15 @@ Heavy: 最高精度。`
                           className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
                         />
                         <span className="text-xs text-slate-300">姿勢検出マーカーを含める</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={skipMemo}
+                          onChange={(e) => setSkipMemo(e.target.checked)}
+                          className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
+                        />
+                        <span className="text-xs text-slate-300">記録終了時に即時保存する (メモなし)</span>
                       </label>
                     </div>
 

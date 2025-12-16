@@ -36,12 +36,25 @@ interface HandData {
 // 統合されたデータ型
 type DetectionData = PoseData | HandData;
 
-// キーポイント名マッピング（ポーズ）
-const POSE_KEYPOINT_NAMES = [
+// キーポイント名マッピング（ポーズ - MoveNet 17点）
+const MOVENET_KEYPOINT_NAMES = [
   "nose", "left_eye", "right_eye", "left_ear", "right_ear",
   "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
   "left_wrist", "right_wrist", "left_hip", "right_hip",
   "left_knee", "right_knee", "left_ankle", "right_ankle"
+];
+
+// キーポイント名マッピング（ポーズ - MediaPipe 33点）
+const MEDIAPIPE_KEYPOINT_NAMES = [
+  "nose", "left_eye_inner", "left_eye", "left_eye_outer",
+  "right_eye_inner", "right_eye", "right_eye_outer",
+  "left_ear", "right_ear", "mouth_left", "mouth_right",
+  "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+  "left_wrist", "right_wrist", "left_pinky", "right_pinky",
+  "left_index", "right_index", "left_thumb", "right_thumb",
+  "left_hip", "right_hip", "left_knee", "right_knee",
+  "left_ankle", "right_ankle", "left_heel", "right_heel",
+  "left_foot_index", "right_foot_index"
 ];
 
 // ランドマーク名マッピング（手）
@@ -63,9 +76,10 @@ const COLOR_PALETTE = [
 // 動きの強度計算（ポーズデータ用）
 const calculateMovementIntensities = (
   currentPose: PoseData["poses"][0],
-  previousPose: PoseData["poses"][0] | null
+  previousPose: PoseData["poses"][0] | null,
+  keypointCount: number
 ): { average: number; byMarker: number[] } => {
-  const byMarker = new Array(17).fill(0);
+  const byMarker = new Array(keypointCount).fill(0);
   if (!previousPose) return { average: 0, byMarker };
 
   let totalMovement = 0;
@@ -197,22 +211,37 @@ const DataViewer = (): JSX.Element => {
     reader.readAsText(file);
   };
 
+  const getPoseKeypointCount = (data: PoseData) => {
+    if (data.poses.length > 0 && data.poses[0].keypoints) {
+      return data.poses[0].keypoints.length;
+    }
+    return 17; // Default to MoveNet
+  };
+
   // タイムライン用のデータ処理
   const processTimelineData = (data: DetectionData) => {
     const intensities: number[] = []; // 平均
     const markerIntensities: number[][] = []; // 各マーカーごとの時系列データ [markerIndex][timeIndex]
 
     // 初期化
-    const markerCount = isPoseData(data) ? 17 : 21;
+    let markerCount = 0;
+    if (isPoseData(data)) {
+      markerCount = getPoseKeypointCount(data);
+    } else {
+      markerCount = 21; // Hand data
+    }
+
     for (let i = 0; i < markerCount; i++) markerIntensities[i] = [];
 
     if (isPoseData(data)) {
       for (let i = 0; i < data.poses.length; i++) {
         const currentPose = data.poses[i];
         const previousPose = i > 0 ? data.poses[i - 1] : null;
-        const { average, byMarker } = calculateMovementIntensities(currentPose, previousPose);
+        const { average, byMarker } = calculateMovementIntensities(currentPose, previousPose, markerCount);
         intensities.push(average);
-        byMarker.forEach((val, idx) => markerIntensities[idx].push(val));
+        byMarker.forEach((val, idx) => {
+          if (markerIntensities[idx]) markerIntensities[idx].push(val);
+        });
       }
     } else if (isHandData(data)) {
       for (let i = 0; i < data.hands.length; i++) {
@@ -278,8 +307,14 @@ const DataViewer = (): JSX.Element => {
     };
   };
 
-  const getMarkerName = (idx: number, isPose: boolean) => {
-    return isPose ? POSE_KEYPOINT_NAMES[idx] || `Point ${idx}` : HAND_LANDMARK_NAMES[idx] || `Landmark ${idx}`;
+  const getMarkerName = (idx: number, isPose: boolean, totalPoints: number) => {
+    if (isPose) {
+      if (totalPoints > 17) {
+        return MEDIAPIPE_KEYPOINT_NAMES[idx] || `Point ${idx}`;
+      }
+      return MOVENET_KEYPOINT_NAMES[idx] || `Point ${idx}`;
+    }
+    return HAND_LANDMARK_NAMES[idx] || `Landmark ${idx}`;
   };
 
   const toggleMarkerSelection = (idx: number) => {
@@ -412,22 +447,26 @@ const DataViewer = (): JSX.Element => {
               <div className="flex flex-wrap gap-2">
                 {(() => {
                   const isPose = isPoseData(detectionData);
-                  const count = isPose ? 17 : 21;
+                  let count = 21;
+                  if (isPose) {
+                    count = getPoseKeypointCount(detectionData);
+                  }
                   return Array.from({ length: count }).map((_, i) => (
                     <button
                       key={i}
                       onClick={() => toggleMarkerSelection(i)}
                       className={`px-3 py-1 rounded-full text-sm font-medium border transition-colors ${selectedMarkers.includes(i)
-                          ? "bg-blue-100 border-blue-500 text-blue-700"
-                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                        ? "bg-blue-100 border-blue-500 text-blue-700"
+                        : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
                         }`}
+
                       style={{
                         borderColor: selectedMarkers.includes(i) ? COLOR_PALETTE[i % COLOR_PALETTE.length] : undefined,
                         color: selectedMarkers.includes(i) ? COLOR_PALETTE[i % COLOR_PALETTE.length] : undefined,
                         backgroundColor: selectedMarkers.includes(i) ? `${COLOR_PALETTE[i % COLOR_PALETTE.length]}20` : undefined // 12% opacity
                       }}
                     >
-                      {getMarkerName(i, isPose)}
+                      {getMarkerName(i, isPose, count)}
                     </button>
                   ))
                 })()}
@@ -615,7 +654,7 @@ const DataViewer = (): JSX.Element => {
                           {selectedMarkers.map(markerIdx => (
                             <div key={markerIdx} className="flex items-center space-x-2">
                               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLOR_PALETTE[markerIdx % COLOR_PALETTE.length] }}></div>
-                              <span>{getMarkerName(markerIdx, isPoseData(detectionData))}</span>
+                              <span>{getMarkerName(markerIdx, isPoseData(detectionData), isPoseData(detectionData) ? getPoseKeypointCount(detectionData) : 21)}</span>
                             </div>
                           ))}
                         </div>

@@ -255,6 +255,13 @@ export const researchData: Research[] = [
         year: 2025,
         url: "test20",
       },
+      {
+        id: 5,
+        title: "other: 動作データのビューワーの改善版",
+        journal: "保存した動作データを表示するビューワーを改善したもの。",
+        year: 2025,
+        url: "dataViewer2",
+      },
 
     ],
   },
