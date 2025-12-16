@@ -5,26 +5,22 @@ export type EffectType = "Normal" | "Sparkle" | "Fire" | "Bubbles" | "Snow" | "H
  * パーティクル基底クラス
  */
 export abstract class Particle {
-    x: number;
-    y: number;
-    size: number;
-    vx: number;
-    vy: number;
-    life: number;
-    initialLife: number;
-    color: string;
+    x: number = 0;
+    y: number = 0;
+    size: number = 0;
+    vx: number = 0;
+    vy: number = 0;
+    life: number = 0;
+    initialLife: number = 0;
+    color: string = "";
+    type: EffectType;
 
-    constructor(x: number, y: number, magnitude: number) {
-        this.x = x;
-        this.y = y;
-        this.size = Math.random() * 5 + 2;
-        this.vx = (Math.random() - 0.5) * 4;
-        this.vy = (Math.random() - 0.5) * 4;
-        this.life = Math.random() * 50 + 50;
-        this.initialLife = this.life;
-        this.color = "#ffffff";
+    constructor(x: number, y: number, magnitude: number, type: EffectType) {
+        this.type = type;
+        this.reset(x, y, magnitude);
     }
 
+    abstract reset(x: number, y: number, magnitude: number): void;
     abstract update(): void;
 
     draw(ctx: CanvasRenderingContext2D) {
@@ -40,7 +36,12 @@ export abstract class Particle {
 
 export class NormalParticle extends Particle {
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Normal");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         // 動きの大きさ（magnitude）に応じてサイズを変化させる
         // magnitudeは概ね 0 ~ 50 くらいの値を取ると想定
         const baseSize = Math.min(Math.max(magnitude / 2, 2), 15);
@@ -48,6 +49,8 @@ export class NormalParticle extends Particle {
         this.color = `hsl(${Math.random() * 360}, 100%, 70%)`;
         this.vx = (Math.random() - 0.5) * (magnitude / 2);
         this.vy = (Math.random() - 0.5) * (magnitude / 2);
+        this.life = Math.random() * 50 + 50;
+        this.initialLife = this.life;
     }
 
     update() {
@@ -59,16 +62,23 @@ export class NormalParticle extends Particle {
 }
 
 export class SparkleParticle extends Particle {
-    rotation: number;
+    rotation: number = 0;
 
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Sparkle");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 3, 2), 10);
         this.size = Math.random() * 3 + baseSize;
         this.color = `hsl(50, 100%, ${50 + Math.random() * 50}%)`; // Gold/Yellow
         this.vx = (Math.random() - 0.5) * 2;
         this.vy = (Math.random() - 0.5) * 2;
         this.rotation = Math.random() * Math.PI * 2;
+        this.life = Math.random() * 50 + 50;
+        this.initialLife = this.life;
     }
 
     update() {
@@ -102,13 +112,19 @@ export class SparkleParticle extends Particle {
 
 export class FireParticle extends Particle {
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Fire");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 2, 4), 20);
         this.size = Math.random() * 5 + baseSize;
         this.vx = (Math.random() - 0.5) * 2;
         this.vy = -Math.random() * 3 - 1; // Move upwards
         this.life = Math.random() * 30 + 30;
         this.initialLife = this.life;
+        this.color = `rgba(255, 255, 0, 1)`; // Initial color
     }
 
     update() {
@@ -130,16 +146,23 @@ export class FireParticle extends Particle {
 }
 
 export class BubbleParticle extends Particle {
-    wobble: number;
+    wobble: number = 0;
 
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Bubbles");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 2, 3), 15);
         this.size = Math.random() * 5 + baseSize;
         this.vx = (Math.random() - 0.5) * 1;
         this.vy = -Math.random() * 2 - 0.5; // Float upwards
         this.color = `hsla(${180 + Math.random() * 40}, 100%, 70%, 0.6)`; // Cyan/Blue
         this.wobble = Math.random() * Math.PI * 2;
+        this.life = Math.random() * 50 + 50;
+        this.initialLife = this.life;
     }
 
     update() {
@@ -169,10 +192,15 @@ export class BubbleParticle extends Particle {
 }
 
 export class SnowParticle extends Particle {
-    wobble: number;
+    wobble: number = 0;
 
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Snow");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 3, 2), 8);
         this.size = Math.random() * 3 + baseSize;
         this.vx = (Math.random() - 0.5) * 2;
@@ -195,11 +223,18 @@ export class SnowParticle extends Particle {
 
 export class HolidayColorsParticle extends Particle {
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "Holiday");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 2, 3), 12);
         this.size = Math.random() * 5 + baseSize;
         this.vx = (Math.random() - 0.5) * magnitude / 2;
         this.vy = (Math.random() - 0.5) * magnitude / 2;
+        this.life = Math.random() * 50 + 50;
+        this.initialLife = this.life;
 
         // Randomly pick Red, Green, Gold, or White
         const rand = Math.random();
@@ -221,11 +256,16 @@ export class HolidayColorsParticle extends Particle {
 }
 
 export class ComplexSnowflakeParticle extends Particle {
-    rotation: number;
-    rotationSpeed: number;
+    rotation: number = 0;
+    rotationSpeed: number = 0;
 
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "GeometricSnow");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 2, 5), 20); // Slightly larger
         this.size = Math.random() * 5 + baseSize;
         this.vx = (Math.random() - 0.5) * 1.5;
@@ -273,12 +313,17 @@ export class ComplexSnowflakeParticle extends Particle {
 }
 
 export class GiftBoxParticle extends Particle {
-    rotation: number;
-    rotationSpeed: number;
-    ribbonColor: string;
+    rotation: number = 0;
+    rotationSpeed: number = 0;
+    ribbonColor: string = "";
 
     constructor(x: number, y: number, magnitude: number) {
-        super(x, y, magnitude);
+        super(x, y, magnitude, "GiftBox");
+    }
+
+    reset(x: number, y: number, magnitude: number) {
+        this.x = x;
+        this.y = y;
         const baseSize = Math.min(Math.max(magnitude / 2, 6), 25);
         this.size = Math.random() * 8 + baseSize;
         this.vx = (Math.random() - 0.5) * 3;
@@ -326,3 +371,50 @@ export class GiftBoxParticle extends Particle {
         ctx.restore();
     }
 }
+
+// --- Object Pooling System ---
+
+class ParticlePool {
+    private pools: Map<EffectType, Particle[]> = new Map();
+
+    private createParticle(type: EffectType, x: number, y: number, magnitude: number): Particle {
+        switch (type) {
+            case "Sparkle": return new SparkleParticle(x, y, magnitude);
+            case "Fire": return new FireParticle(x, y, magnitude);
+            case "Bubbles": return new BubbleParticle(x, y, magnitude);
+            case "Snow": return new SnowParticle(x, y, magnitude);
+            case "Holiday": return new HolidayColorsParticle(x, y, magnitude);
+            case "GeometricSnow": return new ComplexSnowflakeParticle(x, y, magnitude);
+            case "GiftBox": return new GiftBoxParticle(x, y, magnitude);
+            case "Normal":
+            default: return new NormalParticle(x, y, magnitude);
+        }
+    }
+
+    public get(type: EffectType, x: number, y: number, magnitude: number): Particle {
+        let pool = this.pools.get(type);
+        if (!pool) {
+            pool = [];
+            this.pools.set(type, pool);
+        }
+
+        const particle = pool.pop();
+        if (particle) {
+            particle.reset(x, y, magnitude);
+            return particle;
+        }
+
+        return this.createParticle(type, x, y, magnitude);
+    }
+
+    public return(particle: Particle) {
+        let pool = this.pools.get(particle.type);
+        if (!pool) {
+            pool = [];
+            this.pools.set(particle.type, pool);
+        }
+        pool.push(particle);
+    }
+}
+
+export const particlePool = new ParticlePool();

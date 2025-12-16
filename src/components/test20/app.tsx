@@ -20,6 +20,7 @@ import {
   HolidayColorsParticle,
   ComplexSnowflakeParticle,
   GiftBoxParticle,
+  particlePool,
 } from "../effects/effects";
 import {
   Settings,
@@ -597,43 +598,29 @@ const PoseDetector = (): JSX.Element => {
         }
 
         for (let i = 0; i < currentEffectCount; i++) {
-          let particle: Particle;
-          switch (currentSelectedEffect) {
-            case "Sparkle":
-              particle = new SparkleParticle(x, y, magnitude);
-              break;
-            case "Fire":
-              particle = new FireParticle(x, y, magnitude);
-              break;
-            case "Bubbles":
-              particle = new BubbleParticle(x, y, magnitude);
-              break;
-            case "Snow":
-              particle = new SnowParticle(x, y, magnitude);
-              break;
-            case "Holiday":
-              particle = new HolidayColorsParticle(x, y, magnitude);
-              break;
-            case "GeometricSnow":
-              particle = new ComplexSnowflakeParticle(x, y, magnitude);
-              break;
-            case "GiftBox":
-              particle = new GiftBoxParticle(x, y, magnitude);
-              break;
-            case "Normal":
-            default:
-              particle = new NormalParticle(x, y, magnitude);
-              break;
-          }
+          const particle = particlePool.get(currentSelectedEffect, x, y, magnitude);
           particlesRef.current.push(particle);
         }
       };
 
-      for (let i = particlesRef.current.length - 1; i >= 0; i--) {
-        const p = particlesRef.current[i];
+      const particles = particlesRef.current;
+      let i = 0;
+      while (i < particles.length) {
+        const p = particles[i];
         p.update();
         p.draw(handCtx);
-        if (p.life <= 0) particlesRef.current.splice(i, 1);
+        if (p.life <= 0) {
+          particlePool.return(p);
+          // O(1) removal: Swap with last element and pop
+          const lastIndex = particles.length - 1;
+          if (i < lastIndex) {
+            particles[i] = particles[lastIndex];
+          }
+          particles.pop();
+          // Do not increment i, so we process the swapped element next
+        } else {
+          i++;
+        }
       }
 
       // --- Scale Calculation ---
