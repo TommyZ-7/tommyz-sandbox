@@ -6,6 +6,8 @@ import type * as poseDetection from "@tensorflow-models/pose-detection";
 import type * as tf from "@tensorflow/tfjs";
 import {
   PoseLandmarker,
+  HandLandmarker,
+  FaceLandmarker,
   FilesetResolver,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
@@ -47,6 +49,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // --- Types ---
 type MoveNetModelType = "Lightning" | "Thunder" | "multiPose";
 type BlazePoseModelType = "lite" | "full" | "heavy";
+type MediaPipeMode = "Pose" | "Hand" | "Face";
 type DetectorType = "MoveNet" | "MediaPipe";
 type ProcessingMode = "CPU" | "GPU" | "WebGPU";
 type Point = { x: number; y: number };
@@ -56,6 +59,21 @@ type MarkerConfig = {
   rightFoot: boolean;
   leftFoot: boolean;
   face: boolean;
+  // Hand Mode Specific
+  handRightThumb: boolean;
+  handRightIndex: boolean;
+  handRightMiddle: boolean;
+  handRightRing: boolean;
+  handRightPinky: boolean;
+  handLeftThumb: boolean;
+  handLeftIndex: boolean;
+  handLeftMiddle: boolean;
+  handLeftRing: boolean;
+  handLeftPinky: boolean;
+  // Face Mode Specific
+  faceRightEye: boolean;
+  faceLeftEye: boolean;
+  faceMouth: boolean;
 };
 
 // --- Helper Objects ---
@@ -99,6 +117,7 @@ const Matrix = {
 const PoseDetector = (): JSX.Element => {
   // --- State: Logic ---
   const [detectorType, setDetectorType] = useState<DetectorType>("MediaPipe");
+  const [mediaPipeMode, setMediaPipeMode] = useState<MediaPipeMode>("Pose");
   const [moveNetModelType, setMoveNetModelType] =
     useState<MoveNetModelType>("Lightning");
   const [blazePoseModelType, setBlazePoseModelType] =
@@ -125,6 +144,7 @@ const PoseDetector = (): JSX.Element => {
   const [selectedEffect, setSelectedEffect] = useState<EffectType>("Normal");
   const [moveThreshold, setMoveThreshold] = useState<number>(5);
   const [effectCount, setEffectCount] = useState<number>(5);
+  const [mouthOpenThreshold, setMouthOpenThreshold] = useState<number>(0.3);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedData, setRecordedData] = useState<{
     startTime: number;
@@ -144,8 +164,20 @@ const PoseDetector = (): JSX.Element => {
     rightFoot: false,
     leftFoot: false,
     face: false,
+    handRightThumb: true,
+    handRightIndex: true,
+    handRightMiddle: false,
+    handRightRing: false,
+    handRightPinky: false,
+    handLeftThumb: true,
+    handLeftIndex: true,
+    handLeftMiddle: false,
+    handLeftRing: false,
+    handLeftPinky: false,
+    faceRightEye: true,
+    faceLeftEye: true,
+    faceMouth: true,
   });
-
 
   // --- State: UI ---
   const [viewMode, setViewMode] = useState<"setup" | "play">("setup");
@@ -161,27 +193,24 @@ const PoseDetector = (): JSX.Element => {
     text: string;
   } | null>(null);
 
-  const HelpLabel = useCallback(({
-    label,
-    description,
-  }: {
-    label: string;
-    description: string;
-  }) => (
-    <div
-      className="flex items-center space-x-1 cursor-help w-fit"
-      onMouseEnter={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setTooltip({ x: rect.right + 10, y: rect.top, text: description });
-      }}
-      onMouseLeave={() => setTooltip(null)}
-    >
-      <label className="text-xs text-slate-400 pointer-events-none">
-        {label}
-      </label>
-      <HelpCircle size={12} className="text-slate-500" />
-    </div>
-  ), []);
+  const HelpLabel = useCallback(
+    ({ label, description }: { label: string; description: string }) => (
+      <div
+        className="flex items-center space-x-1 cursor-help w-fit"
+        onMouseEnter={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          setTooltip({ x: rect.right + 10, y: rect.top, text: description });
+        }}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        <label className="text-xs text-slate-400 pointer-events-none">
+          {label}
+        </label>
+        <HelpCircle size={12} className="text-slate-500" />
+      </div>
+    ),
+    []
+  );
 
   // --- Refs ---
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -193,6 +222,8 @@ const PoseDetector = (): JSX.Element => {
   const recordedChunksRef = useRef<Blob[]>([]);
   const detectorRef = useRef<poseDetection.PoseDetector | null>(null);
   const landmarkerRef = useRef<PoseLandmarker | null>(null);
+  const handLandmarkerRef = useRef<HandLandmarker | null>(null);
+  const faceLandmarkerRef = useRef<FaceLandmarker | null>(null);
   const adjacentPairsRef = useRef<[number, number][] | null>(null);
   const particlesRef = useRef<Particle[]>([]);
   const lastMarkerPositionsRef = useRef<{
@@ -203,6 +234,71 @@ const PoseDetector = (): JSX.Element => {
     rightFoot: null,
     leftFoot: null,
     face: null,
+    // Hand
+    handRightThumb: null,
+    handRightIndex: null,
+    handRightMiddle: null,
+    handRightRing: null,
+    handRightPinky: null,
+    handLeftThumb: null,
+    handLeftIndex: null,
+    handLeftMiddle: null,
+    handLeftRing: null,
+    handLeftPinky: null,
+    // Face (Positions)
+    faceRightEye: null,
+    faceLeftEye: null,
+    faceMouth: null,
+  });
+  // Target marker positions (updated on detection)
+  const targetMarkerPositionsRef = useRef<{ [key: string]: Point | null }>({
+    rightHand: null,
+    leftHand: null,
+    rightFoot: null,
+    leftFoot: null,
+    face: null,
+    handRightThumb: null,
+    handRightIndex: null,
+    handRightMiddle: null,
+    handRightRing: null,
+    handRightPinky: null,
+    handLeftThumb: null,
+    handLeftIndex: null,
+    handLeftMiddle: null,
+    handLeftRing: null,
+    handLeftPinky: null,
+    faceRightEye: null,
+    faceLeftEye: null,
+    faceMouth: null,
+  });
+  // Current interpolated marker positions (updated every frame)
+  const currentMarkerPositionsRef = useRef<{ [key: string]: Point | null }>({
+    rightHand: null,
+    leftHand: null,
+    rightFoot: null,
+    leftFoot: null,
+    face: null,
+    handRightThumb: null,
+    handRightIndex: null,
+    handRightMiddle: null,
+    handRightRing: null,
+    handRightPinky: null,
+    handLeftThumb: null,
+    handLeftIndex: null,
+    handLeftMiddle: null,
+    handLeftRing: null,
+    handLeftPinky: null,
+    faceRightEye: null,
+    faceLeftEye: null,
+    faceMouth: null,
+  });
+  // Interpolation speed (0.0 - 1.0, higher = faster interpolation)
+  const MARKER_LERP_FACTOR = 0.3;
+  const faceBlendshapesRef = useRef<any[]>([]); // To store blendshapes for face mode
+  // Track previous blink state to detect blink transitions (open -> closed)
+  const prevBlinkStateRef = useRef<{ left: boolean; right: boolean }>({
+    left: false,
+    right: false,
   });
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
@@ -212,6 +308,14 @@ const PoseDetector = (): JSX.Element => {
     h: null,
     h_inv: null,
   });
+  // Store last detected poses for per-frame interpolation
+  const lastRawPosesRef = useRef<poseDetection.Pose[]>([]);
+  const lastScaleRef = useRef<{ scaleX: number; scaleY: number }>({
+    scaleX: 1,
+    scaleY: 1,
+  });
+  // Flag to indicate if we have valid target positions
+  const hasValidTargetsRef = useRef(false);
 
   // --- Interactive Quad State ---
   const [quadPoints, setQuadPoints] = useState<Point[]>([
@@ -230,10 +334,12 @@ const PoseDetector = (): JSX.Element => {
   const selectedEffectRef = useRef(selectedEffect);
   const moveThresholdRef = useRef(moveThreshold);
   const effectCountRef = useRef(effectCount);
+  const mouthOpenThresholdRef = useRef(mouthOpenThreshold);
   const isRecordingRef = useRef(isRecording);
   const handCanvasFullscreenRef = useRef(handCanvasFullscreen);
   const backgroundImageRef = useRef(backgroundImage);
   const detectorTypeRef = useRef(detectorType);
+  const mediaPipeModeRef = useRef(mediaPipeMode);
   const inputModeRef = useRef(inputMode);
   const selectedMarkersRef = useRef(selectedMarkers);
   const handCanvasDimensionsRef = useRef({ width: 0, height: 0 });
@@ -249,7 +355,6 @@ const PoseDetector = (): JSX.Element => {
     includePoseInVideoRef.current = includePoseInVideo;
   }, [includePoseInVideo]);
 
-
   useEffect(() => {
     quadPointsRef.current = quadPoints;
   }, [quadPoints]);
@@ -262,6 +367,9 @@ const PoseDetector = (): JSX.Element => {
   useEffect(() => {
     effectCountRef.current = effectCount;
   }, [effectCount]);
+  useEffect(() => {
+    mouthOpenThresholdRef.current = mouthOpenThreshold;
+  }, [mouthOpenThreshold]);
   useEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
@@ -278,13 +386,14 @@ const PoseDetector = (): JSX.Element => {
     detectorTypeRef.current = detectorType;
   }, [detectorType]);
   useEffect(() => {
+    mediaPipeModeRef.current = mediaPipeMode;
+  }, [mediaPipeMode]);
+  useEffect(() => {
     inputModeRef.current = inputMode;
   }, [inputMode]);
   useEffect(() => {
     selectedMarkersRef.current = selectedMarkers;
   }, [selectedMarkers]);
-
-
 
   // We need a way to access latest values for SYNC_RESPONSE without re-binding.
   // I will create a ref that always holds the current state for all settings.
@@ -295,6 +404,7 @@ const PoseDetector = (): JSX.Element => {
     effectCount,
     moveThreshold,
     detectorType,
+    mediaPipeMode,
     moveNetModelType,
     blazePoseModelType,
     inputMode,
@@ -305,16 +415,16 @@ const PoseDetector = (): JSX.Element => {
   });
 
   const handlersRef = useRef({
-    startRecording: () => { },
-    stopRecording: () => { },
-    handleDownload: (memo?: string) => { }
+    startRecording: () => {},
+    stopRecording: () => {},
+    handleDownload: (memo?: string) => {},
   });
 
   useEffect(() => {
     handlersRef.current = {
       startRecording,
       stopRecording,
-      handleDownload
+      handleDownload,
     };
   });
 
@@ -326,6 +436,7 @@ const PoseDetector = (): JSX.Element => {
       effectCount,
       moveThreshold,
       detectorType,
+      mediaPipeMode,
       moveNetModelType,
       blazePoseModelType,
       inputMode,
@@ -349,8 +460,6 @@ const PoseDetector = (): JSX.Element => {
     includePoseInVideo,
     selectedMarkers,
   ]);
-
-
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -377,7 +486,6 @@ const PoseDetector = (): JSX.Element => {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
-
 
   // --- Memoized Dimensions ---
   const handCanvasDimensions = useMemo(() => {
@@ -442,6 +550,12 @@ const PoseDetector = (): JSX.Element => {
       y: (h[3] * x + h[4] * y + h[5]) / Z,
     };
   };
+
+  // Linear interpolation between two points
+  const lerpPoint = (current: Point, target: Point, factor: number): Point => ({
+    x: current.x + (target.x - current.x) * factor,
+    y: current.y + (target.y - current.y) * factor,
+  });
 
   // --- Drawing Logic ---
   const drawInteractiveOverlay = useCallback(
@@ -598,7 +712,12 @@ const PoseDetector = (): JSX.Element => {
         }
 
         for (let i = 0; i < currentEffectCount; i++) {
-          const particle = particlePool.get(currentSelectedEffect, x, y, magnitude);
+          const particle = particlePool.get(
+            currentSelectedEffect,
+            x,
+            y,
+            magnitude
+          );
           particlesRef.current.push(particle);
         }
       };
@@ -638,67 +757,271 @@ const PoseDetector = (): JSX.Element => {
       const scaleX = handCanvas.width / srcWidth;
       const scaleY = handCanvas.height / srcHeight;
 
-      // --- Hand Tracking Trigger ---
-
-      const scaledThreshold = currentMoveThreshold * ((scaleX + scaleY) / 2);
+      // --- Update Target Positions (only when new detection data arrives) ---
+      // Scale info is stored for the per-frame interpolation function
+      lastScaleRef.current = { scaleX, scaleY };
+      lastRawPosesRef.current = rawPoses;
 
       for (const pose of rawPoses) {
         if (!pose.keypoints) continue;
 
-        let leftWristIdx: number, rightWristIdx: number, noseIdx: number, leftAnkleIdx: number, rightAnkleIdx: number;
-
-        if (currentDetectorType === "MoveNet") {
-          noseIdx = 0;
-          leftWristIdx = 9;
-          rightWristIdx = 10;
-          leftAnkleIdx = 15;
-          rightAnkleIdx = 16;
-        } else {
-          // BlazePose
-          noseIdx = 0;
-          leftWristIdx = 15;
-          rightWristIdx = 16;
-          leftAnkleIdx = 27;
-          rightAnkleIdx = 28;
-        }
-
-        const checkAndEmit = (idx: number, key: string, isEnabled: boolean) => {
-          // Reset if disabled
-          if (!isEnabled) {
-            lastMarkerPositionsRef.current[key] = null;
-            return;
-          }
-
-          const kp = pose.keypoints[idx];
-          if (kp?.score && kp.score > 0.5) {
-            const pt = { x: kp.x * scaleX, y: kp.y * scaleY };
-            const lastPos = lastMarkerPositionsRef.current[key];
-            if (lastPos) {
-              const dist = Math.hypot(pt.x - lastPos.x, pt.y - lastPos.y);
-              if (dist > scaledThreshold) {
-                emitParticles(pt.x, pt.y, dist);
-              }
-            }
-            lastMarkerPositionsRef.current[key] = pt;
+        if (
+          currentDetectorType === "MoveNet" ||
+          (currentDetectorType === "MediaPipe" &&
+            mediaPipeModeRef.current === "Pose")
+        ) {
+          // Pose Mode - Update target positions
+          let leftWristIdx: number,
+            rightWristIdx: number,
+            noseIdx: number,
+            leftAnkleIdx: number,
+            rightAnkleIdx: number;
+          if (currentDetectorType === "MoveNet") {
+            noseIdx = 0;
+            leftWristIdx = 9;
+            rightWristIdx = 10;
+            leftAnkleIdx = 15;
+            rightAnkleIdx = 16;
           } else {
-            lastMarkerPositionsRef.current[key] = null;
+            noseIdx = 0;
+            leftWristIdx = 15;
+            rightWristIdx = 16;
+            leftAnkleIdx = 27;
+            rightAnkleIdx = 28;
           }
-        };
 
-        checkAndEmit(rightWristIdx, 'rightHand', currentSelectedMarkers.rightHand);
-        checkAndEmit(leftWristIdx, 'leftHand', currentSelectedMarkers.leftHand);
-        checkAndEmit(rightAnkleIdx, 'rightFoot', currentSelectedMarkers.rightFoot);
-        checkAndEmit(leftAnkleIdx, 'leftFoot', currentSelectedMarkers.leftFoot);
-        checkAndEmit(noseIdx, 'face', currentSelectedMarkers.face);
+          const updateTarget = (idx: number, key: keyof MarkerConfig) => {
+            if (!currentSelectedMarkers[key]) {
+              targetMarkerPositionsRef.current[key as string] = null;
+              return;
+            }
+            const kp = pose.keypoints[idx];
+            if (kp?.score && kp.score > 0.5) {
+              targetMarkerPositionsRef.current[key as string] = {
+                x: kp.x * scaleX,
+                y: kp.y * scaleY,
+              };
+              hasValidTargetsRef.current = true;
+            } else {
+              targetMarkerPositionsRef.current[key as string] = null;
+            }
+          };
+
+          updateTarget(rightWristIdx, "rightHand");
+          updateTarget(leftWristIdx, "leftHand");
+          updateTarget(rightAnkleIdx, "rightFoot");
+          updateTarget(leftAnkleIdx, "leftFoot");
+          updateTarget(noseIdx, "face");
+        } else if (
+          currentDetectorType === "MediaPipe" &&
+          mediaPipeModeRef.current === "Hand"
+        ) {
+          // Hand Mode - Update target positions
+          const label = (pose as any).handedness || "Right";
+          const isRight = label === "Right";
+          const sidePrefix = isRight ? "handRight" : "handLeft";
+
+          const fingers = [
+            { idx: 4, name: "Thumb" },
+            { idx: 8, name: "Index" },
+            { idx: 12, name: "Middle" },
+            { idx: 16, name: "Ring" },
+            { idx: 20, name: "Pinky" },
+          ];
+
+          fingers.forEach((f) => {
+            const key = `${sidePrefix}${f.name}` as keyof MarkerConfig;
+            if (!currentSelectedMarkers[key]) {
+              targetMarkerPositionsRef.current[key] = null;
+              return;
+            }
+            const kp = pose.keypoints[f.idx];
+            if (kp?.score && kp.score > 0.5) {
+              targetMarkerPositionsRef.current[key] = {
+                x: kp.x * scaleX,
+                y: kp.y * scaleY,
+              };
+              hasValidTargetsRef.current = true;
+            } else {
+              targetMarkerPositionsRef.current[key] = null;
+            }
+          });
+        } else if (
+          currentDetectorType === "MediaPipe" &&
+          mediaPipeModeRef.current === "Face"
+        ) {
+          // Face Mode - Update target positions
+          const updateFaceTarget = (kpIdx: number, key: keyof MarkerConfig) => {
+            if (!currentSelectedMarkers[key]) {
+              targetMarkerPositionsRef.current[key as string] = null;
+              return;
+            }
+            const kp = pose.keypoints[kpIdx];
+            if (kp) {
+              targetMarkerPositionsRef.current[key as string] = {
+                x: kp.x * scaleX,
+                y: kp.y * scaleY,
+              };
+              hasValidTargetsRef.current = true;
+            }
+          };
+
+          updateFaceTarget(33, "faceLeftEye");
+          updateFaceTarget(263, "faceRightEye");
+          updateFaceTarget(13, "faceMouth");
+        }
       }
     },
     [drawInteractiveOverlay]
   );
 
+  // --- Per-frame marker interpolation and particle emission ---
+  const updateMarkerInterpolation = useCallback(() => {
+    const handCanvas = handCanvasRef.current;
+    if (!handCanvas) return;
+
+    const currentMoveThreshold = moveThresholdRef.current;
+    const currentEffectCount = effectCountRef.current;
+    const currentSelectedEffect = selectedEffectRef.current;
+    const currentDetectorType = detectorTypeRef.current;
+    const currentSelectedMarkers = selectedMarkersRef.current;
+    const { scaleX, scaleY } = lastScaleRef.current;
+    const scaledThreshold = currentMoveThreshold * ((scaleX + scaleY) / 2);
+
+    const emitParticles = (x: number, y: number, magnitude: number) => {
+      if (audioRef.current && !isAudioPlaying()) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch((e) => console.error(e));
+      }
+
+      for (let i = 0; i < currentEffectCount; i++) {
+        const particle = particlePool.get(
+          currentSelectedEffect,
+          x,
+          y,
+          magnitude
+        );
+        particlesRef.current.push(particle);
+      }
+    };
+
+    // Get all marker keys to process based on mode
+    let markerKeys: string[] = [];
+    if (
+      currentDetectorType === "MoveNet" ||
+      (currentDetectorType === "MediaPipe" &&
+        mediaPipeModeRef.current === "Pose")
+    ) {
+      markerKeys = ["rightHand", "leftHand", "rightFoot", "leftFoot", "face"];
+    } else if (
+      currentDetectorType === "MediaPipe" &&
+      mediaPipeModeRef.current === "Hand"
+    ) {
+      markerKeys = [
+        "handRightThumb",
+        "handRightIndex",
+        "handRightMiddle",
+        "handRightRing",
+        "handRightPinky",
+        "handLeftThumb",
+        "handLeftIndex",
+        "handLeftMiddle",
+        "handLeftRing",
+        "handLeftPinky",
+      ];
+    } else if (
+      currentDetectorType === "MediaPipe" &&
+      mediaPipeModeRef.current === "Face"
+    ) {
+      markerKeys = ["faceLeftEye", "faceRightEye", "faceMouth"];
+    }
+
+    // Process each marker with interpolation
+    for (const key of markerKeys) {
+      const target = targetMarkerPositionsRef.current[key];
+
+      if (!target || !currentSelectedMarkers[key as keyof MarkerConfig]) {
+        // Target lost - reset current position
+        if (!target) {
+          currentMarkerPositionsRef.current[key] = null;
+          lastMarkerPositionsRef.current[key] = null;
+        }
+        continue;
+      }
+
+      // Initialize current position if not set
+      if (!currentMarkerPositionsRef.current[key]) {
+        currentMarkerPositionsRef.current[key] = { ...target };
+      }
+
+      // Interpolate current position towards target every frame
+      const currentPt = currentMarkerPositionsRef.current[key]!;
+      const interpolatedPt = lerpPoint(currentPt, target, MARKER_LERP_FACTOR);
+      currentMarkerPositionsRef.current[key] = interpolatedPt;
+
+      // Handle particle emission differently for Face mode vs Pose/Hand mode
+      if (
+        currentDetectorType === "MediaPipe" &&
+        mediaPipeModeRef.current === "Face"
+      ) {
+        // Face mode - emit based on expression scores, not movement
+        const blendshapes = faceBlendshapesRef.current[0];
+        if (blendshapes) {
+          const getScore = (name: string) =>
+            blendshapes.categories.find((c: any) => c.categoryName === name)
+              ?.score || 0;
+
+          if (key === "faceMouth") {
+            // Mouth - emit particles when jaw is open (uses configurable threshold)
+            const jawOpenScore = getScore("jawOpen");
+            const threshold = mouthOpenThresholdRef.current;
+            if (jawOpenScore > threshold) {
+              // Magnitude increases with how wide the mouth is open
+              const magnitude =
+                5 + (jawOpenScore - threshold) * (45 / (1 - threshold)); // Scale from 5 to 50
+              emitParticles(interpolatedPt.x, interpolatedPt.y, magnitude);
+            }
+          } else if (key === "faceLeftEye") {
+            // Left eye - blink trigger (only on transition from open to closed)
+            const blinkScore = getScore("eyeBlinkLeft");
+            const isBlinking = blinkScore > 0.5;
+            if (isBlinking && !prevBlinkStateRef.current.left) {
+              // Just started blinking - emit particles
+              const magnitude = 10 + blinkScore * 20;
+              emitParticles(interpolatedPt.x, interpolatedPt.y, magnitude);
+            }
+            prevBlinkStateRef.current.left = isBlinking;
+          } else if (key === "faceRightEye") {
+            // Right eye - blink trigger (only on transition from open to closed)
+            const blinkScore = getScore("eyeBlinkRight");
+            const isBlinking = blinkScore > 0.5;
+            if (isBlinking && !prevBlinkStateRef.current.right) {
+              // Just started blinking - emit particles
+              const magnitude = 10 + blinkScore * 20;
+              emitParticles(interpolatedPt.x, interpolatedPt.y, magnitude);
+            }
+            prevBlinkStateRef.current.right = isBlinking;
+          }
+        }
+      } else {
+        // Pose and Hand mode - emit based on movement threshold
+        const lastPos = lastMarkerPositionsRef.current[key];
+        if (lastPos) {
+          const dist = Math.hypot(
+            interpolatedPt.x - lastPos.x,
+            interpolatedPt.y - lastPos.y
+          );
+          if (dist > scaledThreshold) {
+            emitParticles(interpolatedPt.x, interpolatedPt.y, dist);
+          }
+        }
+      }
+      lastMarkerPositionsRef.current[key] = interpolatedPt;
+    }
+  }, []);
+
   const drawRecordingFrame = useCallback(
-    (
-      transformedPoses: poseDetection.Pose[]
-    ) => {
+    (transformedPoses: poseDetection.Pose[]) => {
       if (!isRecordingRef.current || !isRecordingVideoRef.current) return;
 
       const video = videoRef.current;
@@ -708,7 +1031,10 @@ const PoseDetector = (): JSX.Element => {
       if (!video || !recCanvas || !ctx) return;
 
       // Ensure canvas matches video size
-      if (recCanvas.width !== video.videoWidth || recCanvas.height !== video.videoHeight) {
+      if (
+        recCanvas.width !== video.videoWidth ||
+        recCanvas.height !== video.videoHeight
+      ) {
         recCanvas.width = video.videoWidth;
         recCanvas.height = video.videoHeight;
       }
@@ -751,7 +1077,15 @@ const PoseDetector = (): JSX.Element => {
     const currentDetectorType = detectorTypeRef.current;
 
     const hasDetector =
-      currentDetectorType === "MediaPipe" ? landmarker : detector;
+      currentDetectorType === "MediaPipe"
+        ? mediaPipeModeRef.current === "Pose"
+          ? landmarker
+          : mediaPipeModeRef.current === "Hand"
+          ? handLandmarkerRef.current
+          : mediaPipeModeRef.current === "Face"
+          ? faceLandmarkerRef.current
+          : null
+        : detector;
     if (hasDetector && video && video.readyState === 4 && handCanvas) {
       try {
         if (!transformedCanvasRef.current)
@@ -895,29 +1229,77 @@ const PoseDetector = (): JSX.Element => {
         // Estimate Poses
         let rawPoses: poseDetection.Pose[] = [];
 
-        if (landmarker && currentDetectorType === "MediaPipe") {
+        if (currentDetectorType === "MediaPipe") {
           let timestamp = performance.now();
-          // Ensure strictly monotonically increasing timestamp
           if (timestamp <= lastVideoTimeRef.current) {
-            timestamp = lastVideoTimeRef.current + 0.1; // Minimal increment
+            timestamp = lastVideoTimeRef.current + 0.1;
           }
           lastVideoTimeRef.current = timestamp;
 
-          const result = landmarker.detectForVideo(
-            transformedCanvas,
-            timestamp
-          );
-          if (result.landmarks && result.landmarks.length > 0) {
-            // Convert MediaPipe Landmarks to TensorFlow.js Pose format
-            rawPoses = result.landmarks.map((landmarks) => ({
-              keypoints: landmarks.map((lm, i) => ({
-                x: lm.x * transformedCanvas.width,
-                y: lm.y * transformedCanvas.height,
-                z: lm.z,
-                score: (lm as any).visibility ?? 1.0, // PoseLandmarker has visibility/presence
-                name: i.toString(), // Names mapped elsewhere or not crucial here
-              })),
-            }));
+          if (mediaPipeModeRef.current === "Pose" && landmarkerRef.current) {
+            const result = landmarkerRef.current.detectForVideo(
+              transformedCanvas,
+              timestamp
+            );
+            if (result.landmarks) {
+              rawPoses = result.landmarks.map((landmarks) => ({
+                keypoints: landmarks.map((lm, i) => ({
+                  x: lm.x * transformedCanvas.width,
+                  y: lm.y * transformedCanvas.height,
+                  z: lm.z,
+                  score: (lm as any).visibility ?? 1.0,
+                  name: i.toString(),
+                })),
+              }));
+            }
+          } else if (
+            mediaPipeModeRef.current === "Hand" &&
+            handLandmarkerRef.current
+          ) {
+            const result = handLandmarkerRef.current.detectForVideo(
+              transformedCanvas,
+              timestamp
+            );
+            if (result.landmarks) {
+              rawPoses = result.landmarks.map((landmarks, index) => {
+                const handedness =
+                  result.handedness[index]?.[0]?.categoryName || "Right";
+                return {
+                  keypoints: landmarks.map((lm, i) => ({
+                    x: lm.x * transformedCanvas.width,
+                    y: lm.y * transformedCanvas.height,
+                    z: lm.z,
+                    score: 1.0,
+                    name: i.toString(),
+                  })),
+                  handedness: handedness,
+                } as any;
+              });
+            }
+          } else if (
+            mediaPipeModeRef.current === "Face" &&
+            faceLandmarkerRef.current
+          ) {
+            const result = faceLandmarkerRef.current.detectForVideo(
+              transformedCanvas,
+              timestamp
+            );
+            if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+              // Update blendshapes - use result or clear if not available
+              faceBlendshapesRef.current = result.faceBlendshapes || [];
+              rawPoses = result.faceLandmarks.map((landmarks) => ({
+                keypoints: landmarks.map((lm, i) => ({
+                  x: lm.x * transformedCanvas.width,
+                  y: lm.y * transformedCanvas.height,
+                  z: lm.z,
+                  score: 1.0,
+                  name: i.toString(),
+                })),
+              }));
+            } else {
+              // No face detected - clear blendshapes to stop particle emission
+              faceBlendshapesRef.current = [];
+            }
           }
         } else if (detector) {
           rawPoses = await detector.estimatePoses(transformedCanvas, {
@@ -942,59 +1324,59 @@ const PoseDetector = (): JSX.Element => {
             const keypointNames =
               detectorTypeRef.current === "MoveNet"
                 ? [
-                  "nose",
-                  "left_eye",
-                  "right_eye",
-                  "left_ear",
-                  "right_ear",
-                  "left_shoulder",
-                  "right_shoulder",
-                  "left_elbow",
-                  "right_elbow",
-                  "left_wrist",
-                  "right_wrist",
-                  "left_hip",
-                  "right_hip",
-                  "left_knee",
-                  "right_knee",
-                  "left_ankle",
-                  "right_ankle",
-                ]
+                    "nose",
+                    "left_eye",
+                    "right_eye",
+                    "left_ear",
+                    "right_ear",
+                    "left_shoulder",
+                    "right_shoulder",
+                    "left_elbow",
+                    "right_elbow",
+                    "left_wrist",
+                    "right_wrist",
+                    "left_hip",
+                    "right_hip",
+                    "left_knee",
+                    "right_knee",
+                    "left_ankle",
+                    "right_ankle",
+                  ]
                 : [
-                  "nose",
-                  "left_eye_inner",
-                  "left_eye",
-                  "left_eye_outer",
-                  "right_eye_inner",
-                  "right_eye",
-                  "right_eye_outer",
-                  "left_ear",
-                  "right_ear",
-                  "mouth_left",
-                  "mouth_right",
-                  "left_shoulder",
-                  "right_shoulder",
-                  "left_elbow",
-                  "right_elbow",
-                  "left_wrist",
-                  "right_wrist",
-                  "left_pinky",
-                  "right_pinky",
-                  "left_index",
-                  "right_index",
-                  "left_thumb",
-                  "right_thumb",
-                  "left_hip",
-                  "right_hip",
-                  "left_knee",
-                  "right_knee",
-                  "left_ankle",
-                  "right_ankle",
-                  "left_heel",
-                  "right_heel",
-                  "left_foot_index",
-                  "right_foot_index",
-                ];
+                    "nose",
+                    "left_eye_inner",
+                    "left_eye",
+                    "left_eye_outer",
+                    "right_eye_inner",
+                    "right_eye",
+                    "right_eye_outer",
+                    "left_ear",
+                    "right_ear",
+                    "mouth_left",
+                    "mouth_right",
+                    "left_shoulder",
+                    "right_shoulder",
+                    "left_elbow",
+                    "right_elbow",
+                    "left_wrist",
+                    "right_wrist",
+                    "left_pinky",
+                    "right_pinky",
+                    "left_index",
+                    "right_index",
+                    "left_thumb",
+                    "right_thumb",
+                    "left_hip",
+                    "right_hip",
+                    "left_knee",
+                    "right_knee",
+                    "left_ankle",
+                    "right_ankle",
+                    "left_heel",
+                    "right_heel",
+                    "left_foot_index",
+                    "right_foot_index",
+                  ];
 
             for (const pose of transformedPoses) {
               if (pose.keypoints && pose.keypoints.length > 0) {
@@ -1060,8 +1442,8 @@ const PoseDetector = (): JSX.Element => {
             processingMode === "CPU"
               ? "cpu"
               : processingMode === "GPU"
-                ? "webgl"
-                : "webgpu"
+              ? "webgl"
+              : "webgpu"
           )
           .catch(() => tfModule.setBackend("webgl"));
         await tfModule.ready();
@@ -1074,8 +1456,8 @@ const PoseDetector = (): JSX.Element => {
               moveNetModelType === "Lightning"
                 ? pdModule.movenet.modelType.SINGLEPOSE_LIGHTNING
                 : moveNetModelType === "Thunder"
-                  ? pdModule.movenet.modelType.SINGLEPOSE_THUNDER
-                  : pdModule.movenet.modelType.MULTIPOSE_LIGHTNING,
+                ? pdModule.movenet.modelType.SINGLEPOSE_THUNDER
+                : pdModule.movenet.modelType.MULTIPOSE_LIGHTNING,
           });
           adjacentPairsRef.current = pdModule.util.getAdjacentPairs(model) as [
             number,
@@ -1086,32 +1468,75 @@ const PoseDetector = (): JSX.Element => {
           const vision = await FilesetResolver.forVisionTasks(
             "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
           );
-          const isLite = blazePoseModelType === "lite";
-          const isHeavy = blazePoseModelType === "heavy";
-          const modelAssetPath = isLite
-            ? "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
-            : isHeavy
+
+          if (mediaPipeMode === "Pose") {
+            const isLite = blazePoseModelType === "lite";
+            const isHeavy = blazePoseModelType === "heavy";
+            const modelAssetPath = isLite
+              ? "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"
+              : isHeavy
               ? "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
               : "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
 
-          landmarkerRef.current = await PoseLandmarker.createFromOptions(
-            vision,
-            {
-              baseOptions: {
-                modelAssetPath: modelAssetPath,
-                delegate: processingMode === "GPU" ? "GPU" : "CPU",
-              },
-              runningMode: "VIDEO",
-              numPoses: 1,
-              minPoseDetectionConfidence: 0.5,
-              minPosePresenceConfidence: 0.5,
-              minTrackingConfidence: 0.5,
-            }
-          );
-          // Define adjacent pairs for MediaPipe (Standard BlazePose Topology)
-          adjacentPairsRef.current = PoseLandmarker.POSE_CONNECTIONS.map(
-            (c) => [c.start, c.end]
-          );
+            landmarkerRef.current = await PoseLandmarker.createFromOptions(
+              vision,
+              {
+                baseOptions: {
+                  modelAssetPath: modelAssetPath,
+                  delegate: processingMode === "GPU" ? "GPU" : "CPU",
+                },
+                runningMode: "VIDEO",
+                numPoses: 1,
+                minPoseDetectionConfidence: 0.5,
+                minPosePresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+              }
+            );
+            adjacentPairsRef.current = PoseLandmarker.POSE_CONNECTIONS.map(
+              (c) => [c.start, c.end]
+            );
+          } else if (mediaPipeMode === "Hand") {
+            handLandmarkerRef.current = await HandLandmarker.createFromOptions(
+              vision,
+              {
+                baseOptions: {
+                  modelAssetPath:
+                    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+                  delegate: processingMode === "GPU" ? "GPU" : "CPU",
+                },
+                runningMode: "VIDEO",
+                numHands: 2,
+                minHandDetectionConfidence: 0.5,
+                minHandPresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+              }
+            );
+            adjacentPairsRef.current = HandLandmarker.HAND_CONNECTIONS.map(
+              (c) => [c.start, c.end]
+            );
+          } else if (mediaPipeMode === "Face") {
+            faceLandmarkerRef.current = await FaceLandmarker.createFromOptions(
+              vision,
+              {
+                baseOptions: {
+                  modelAssetPath:
+                    "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                  delegate: processingMode === "GPU" ? "GPU" : "CPU",
+                },
+                runningMode: "VIDEO",
+                numFaces: 1,
+                minFaceDetectionConfidence: 0.5,
+                minFacePresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5,
+                outputFaceBlendshapes: true,
+              }
+            );
+            adjacentPairsRef.current =
+              FaceLandmarker.FACE_LANDMARKS_TESSELATION.map((c) => [
+                c.start,
+                c.end,
+              ]);
+          }
         }
         setIsModelReady(true);
 
@@ -1120,10 +1545,10 @@ const PoseDetector = (): JSX.Element => {
           const stream = await navigator.mediaDevices.getUserMedia({
             video: selectedCameraId
               ? {
-                deviceId: { exact: selectedCameraId },
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
-              }
+                  deviceId: { exact: selectedCameraId },
+                  width: { ideal: 1280 },
+                  height: { ideal: 720 },
+                }
               : { width: { ideal: 1280 }, height: { ideal: 720 } },
           });
           videoRef.current.srcObject = stream;
@@ -1157,6 +1582,7 @@ const PoseDetector = (): JSX.Element => {
     };
   }, [
     detectorType,
+    mediaPipeMode,
     moveNetModelType,
     blazePoseModelType,
     processingMode,
@@ -1168,17 +1594,20 @@ const PoseDetector = (): JSX.Element => {
     let id: number;
     const loop = async () => {
       await detectPose();
+      // Run marker interpolation every frame for smooth movement
+      updateMarkerInterpolation();
       id = requestAnimationFrame(loop);
     };
     if (isModelReady && isCameraReady) loop();
     return () => cancelAnimationFrame(id);
-  }, [isModelReady, isCameraReady, detectPose]);
+  }, [isModelReady, isCameraReady, detectPose, updateMarkerInterpolation]);
 
   // --- Interaction Handlers ---
   const getPointerPos = (e: React.MouseEvent | React.TouchEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0 || video.videoHeight === 0) return null;
+    if (!video || video.videoWidth === 0 || video.videoHeight === 0)
+      return null;
 
     const clientX =
       "touches" in e.nativeEvent
@@ -1259,7 +1688,10 @@ const PoseDetector = (): JSX.Element => {
 
   const handleDownload = (memoOverride?: string) => {
     // Download JSON
-    const data = { ...recordedData, memo: (memoOverride ?? memo).trim() || "No Memo" };
+    const data = {
+      ...recordedData,
+      memo: (memoOverride ?? memo).trim() || "No Memo",
+    };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
@@ -1274,7 +1706,9 @@ const PoseDetector = (): JSX.Element => {
 
     // Download Video if available
     if (recordedChunksRef.current.length > 0) {
-      const videoBlob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+      const videoBlob = new Blob(recordedChunksRef.current, {
+        type: "video/webm",
+      });
       const videoUrl = URL.createObjectURL(videoBlob);
       const v = document.createElement("a");
       v.href = videoUrl;
@@ -1292,7 +1726,10 @@ const PoseDetector = (): JSX.Element => {
   const startRecording = () => {
     setIsRecording(true);
     const channel = new BroadcastChannel("test20_settings_channel");
-    channel.postMessage({ type: "RECORDING_STARTED", payload: { startTime: Date.now() } });
+    channel.postMessage({
+      type: "RECORDING_STARTED",
+      payload: { startTime: Date.now() },
+    });
     channel.close();
 
     recordingStartTimeRef.current = Date.now();
@@ -1345,7 +1782,10 @@ const PoseDetector = (): JSX.Element => {
       }
     };
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
       mediaRecorderRef.current.onstop = finalize;
       mediaRecorderRef.current.stop();
     } else {
@@ -1379,8 +1819,12 @@ const PoseDetector = (): JSX.Element => {
         const { key, value } = payload;
         // Map settings
         switch (key) {
-          case "selectedEffect": setSelectedEffect(value); break;
-          case "selectedBackground": setSelectedBackground(value); break;
+          case "selectedEffect":
+            setSelectedEffect(value);
+            break;
+          case "selectedBackground":
+            setSelectedBackground(value);
+            break;
           case "selectedSound":
             const s = Sounds.find((snd) => snd.name === value);
             if (s) {
@@ -1390,17 +1834,42 @@ const PoseDetector = (): JSX.Element => {
               setSelectedSound(null);
             }
             break;
-          case "effectCount": setEffectCount(value); break;
-          case "moveThreshold": setMoveThreshold(value); break;
-          case "detectorType": setDetectorType(value); break;
-          case "moveNetModelType": setMoveNetModelType(value); break;
-          case "blazePoseModelType": setBlazePoseModelType(value); break;
-          case "inputMode": setInputMode(value); break;
-          case "selectedCameraId": setSelectedCameraId(value); break;
-          case "isRecordingVideo": setIsRecordingVideo(value); break;
-          case "includePoseInVideo": setIncludePoseInVideo(value); break;
-          case "skipMemo": setSkipMemo(value); break;
-          case "selectedMarkers": setSelectedMarkers(value); break;
+          case "effectCount":
+            setEffectCount(value);
+            break;
+          case "moveThreshold":
+            setMoveThreshold(value);
+            break;
+          case "detectorType":
+            setDetectorType(value);
+            break;
+          case "mediaPipeMode":
+            setMediaPipeMode(value);
+            break;
+          case "moveNetModelType":
+            setMoveNetModelType(value);
+            break;
+          case "blazePoseModelType":
+            setBlazePoseModelType(value);
+            break;
+          case "inputMode":
+            setInputMode(value);
+            break;
+          case "selectedCameraId":
+            setSelectedCameraId(value);
+            break;
+          case "isRecordingVideo":
+            setIsRecordingVideo(value);
+            break;
+          case "includePoseInVideo":
+            setIncludePoseInVideo(value);
+            break;
+          case "skipMemo":
+            setSkipMemo(value);
+            break;
+          case "selectedMarkers":
+            setSelectedMarkers(value);
+            break;
         }
       }
     };
@@ -1434,13 +1903,17 @@ const PoseDetector = (): JSX.Element => {
             setActiveSections([...activeSections, id]);
           }
         }}
-        className={`flex items-center justify-between w-full p-3 rounded-lg transition-all mb-2 ${isActive
-          ? "bg-slate-800 border-l-4 border-blue-500 shadow-lg"
-          : "bg-slate-900/50 hover:bg-slate-800 border-l-4 border-transparent"
-          }`}
+        className={`flex items-center justify-between w-full p-3 rounded-lg transition-all mb-2 ${
+          isActive
+            ? "bg-slate-800 border-l-4 border-blue-500 shadow-lg"
+            : "bg-slate-900/50 hover:bg-slate-800 border-l-4 border-transparent"
+        }`}
       >
         <div className="flex items-center space-x-2 text-sm font-semibold text-slate-200">
-          <Icon size={18} className={isActive ? "text-blue-400" : "text-slate-400"} />
+          <Icon
+            size={18}
+            className={isActive ? "text-blue-400" : "text-slate-400"}
+          />
           <span>{label}</span>
           {badge && <div className="ml-2">{badge}</div>}
         </div>
@@ -1461,10 +1934,11 @@ const PoseDetector = (): JSX.Element => {
         </div>
         <div className="flex items-center space-x-4">
           <span
-            className={`text-xs px-2 py-1 rounded-full ${isModelReady
-              ? "bg-green-500/20 text-green-400"
-              : "bg-yellow-500/20 text-yellow-400"
-              }`}
+            className={`text-xs px-2 py-1 rounded-full ${
+              isModelReady
+                ? "bg-green-500/20 text-green-400"
+                : "bg-yellow-500/20 text-yellow-400"
+            }`}
           >
             {status}
           </span>
@@ -1499,20 +1973,22 @@ const PoseDetector = (): JSX.Element => {
           <div className="flex space-x-4 mb-4 z-10">
             <button
               onClick={() => setViewMode("play")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === "play"
-                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                }`}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                viewMode === "play"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
+                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              }`}
             >
               <Play size={16} />
               <span>Play Mode</span>
             </button>
             <button
               onClick={() => setViewMode("setup")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${viewMode === "setup"
-                ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
-                : "bg-slate-800 text-slate-400 hover:bg-slate-700"
-                }`}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                viewMode === "setup"
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-900/50"
+                  : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+              }`}
             >
               <Sliders size={16} />
               <span>Setup Mode</span>
@@ -1523,8 +1999,9 @@ const PoseDetector = (): JSX.Element => {
             {/* Output Canvas (The Result) */}
             {!handCanvasFullscreen && (
               <div
-                className={`relative flex items-center justify-center transition-all duration-500 ease-in-out border border-slate-700 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl ${viewMode === "play" ? "w-full h-full" : "w-1/2 h-2/3 mr-4"
-                  }`}
+                className={`relative flex items-center justify-center transition-all duration-500 ease-in-out border border-slate-700 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl ${
+                  viewMode === "play" ? "w-full h-full" : "w-1/2 h-2/3 mr-4"
+                }`}
               >
                 <canvas
                   ref={handCanvasRef}
@@ -1554,10 +2031,11 @@ const PoseDetector = (): JSX.Element => {
             {/* Input Video (The Setup) - Always rendered to keep videoRef alive */}
             <div
               className={`relative border border-slate-700 bg-slate-900 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center cursor-crosshair transition-all duration-500 ease-in-out
-                                ${viewMode === "setup"
-                  ? "w-1/2 h-2/3 opacity-100 scale-100"
-                  : "w-0 h-0 opacity-0 scale-0 overflow-hidden absolute pointer-events-none"
-                }
+                                ${
+                                  viewMode === "setup"
+                                    ? "w-1/2 h-2/3 opacity-100 scale-100"
+                                    : "w-0 h-0 opacity-0 scale-0 overflow-hidden absolute pointer-events-none"
+                                }
                             `}
               onMouseDown={handlePointerDown}
               onMouseMove={handlePointerMove}
@@ -1626,10 +2104,11 @@ const PoseDetector = (): JSX.Element => {
                           <button
                             key={e}
                             onClick={() => setSelectedEffect(e as EffectType)}
-                            className={`px-2 py-2 text-xs rounded-md border text-center transition ${selectedEffect === e
-                              ? "bg-blue-600 border-blue-500 text-white"
-                              : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
-                              }`}
+                            className={`px-2 py-2 text-xs rounded-md border text-center transition ${
+                              selectedEffect === e
+                                ? "bg-blue-600 border-blue-500 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
+                            }`}
                           >
                             {e}
                           </button>
@@ -1686,7 +2165,9 @@ const PoseDetector = (): JSX.Element => {
                             label="パーティクル数"
                             description="一度に発生するエフェクトの数を調整します。"
                           />
-                          <span className="text-xs text-slate-400">{effectCount}</span>
+                          <span className="text-xs text-slate-400">
+                            {effectCount}
+                          </span>
                         </div>
                         <input
                           type="range"
@@ -1705,7 +2186,9 @@ const PoseDetector = (): JSX.Element => {
                             label="動作検出感度"
                             description="動作を検出する感度を調整します。値が小さいほど敏感になります。"
                           />
-                          <span className="text-xs text-slate-400">{moveThreshold}</span>
+                          <span className="text-xs text-slate-400">
+                            {moveThreshold}
+                          </span>
                         </div>
                         <input
                           type="range"
@@ -1718,37 +2201,116 @@ const PoseDetector = (): JSX.Element => {
                           className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                         />
                       </div>
+                      {/* Mouth Open Threshold - Only shown in Face mode */}
+                      {detectorType === "MediaPipe" &&
+                        mediaPipeMode === "Face" && (
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <HelpLabel
+                                label="口開き閾値"
+                                description="口を開いたと判定する閾値を調整します。値が小さいほど少し開いただけで反応します。"
+                              />
+                              <span className="text-xs text-slate-400">
+                                {mouthOpenThreshold.toFixed(2)}
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min="0.05"
+                              max="0.8"
+                              step="0.05"
+                              value={mouthOpenThreshold}
+                              onChange={(e) =>
+                                setMouthOpenThreshold(Number(e.target.value))
+                              }
+                              className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                            />
+                          </div>
+                        )}
                     </div>
                   </div>
                 )}
 
                 {/* Marker Section */}
-                <SectionHeader id="markers" label="マーカー設定" icon={Sliders} />
+                <SectionHeader
+                  id="markers"
+                  label="マーカー設定"
+                  icon={Sliders}
+                />
                 {activeSections.includes("markers") && (
                   <div className="p-3 bg-slate-900/30 rounded-lg space-y-4 mb-2">
                     <div className="space-y-2">
-                      <HelpLabel label="有効なマーカー" description="パーティクルを発生させる部位を選択します。" />
+                      <HelpLabel
+                        label="有効なマーカー"
+                        description="パーティクルを発生させる部位を選択します。"
+                      />
                       <div className="grid grid-cols-2 gap-2">
-                        {[
-                          { k: "face", l: "顔 (Face)" },
-                          { k: "rightHand", l: "右手 (R-Hand)" },
-                          { k: "leftHand", l: "左手 (L-Hand)" },
-                          { k: "rightFoot", l: "右足 (R-Foot)" },
-                          { k: "leftFoot", l: "左足 (L-Foot)" },
-                        ].map((item) => (
-                          <label key={item.k} className="flex items-center space-x-2 bg-slate-800 p-2 rounded-lg cursor-pointer hover:bg-slate-750 transition">
-                            <input
-                              type="checkbox"
-                              checked={selectedMarkers[item.k as keyof MarkerConfig]}
-                              onChange={(e) => {
-                                const newMarkers = { ...selectedMarkers, [item.k]: e.target.checked };
-                                setSelectedMarkers(newMarkers);
-                              }}
-                              className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
-                            />
-                            <span className="text-xs text-slate-300">{item.l}</span>
-                          </label>
-                        ))}
+                        {(() => {
+                          let markers: { k: string; l: string }[] = [];
+                          if (
+                            detectorType === "MoveNet" ||
+                            (detectorType === "MediaPipe" &&
+                              mediaPipeMode === "Pose")
+                          ) {
+                            markers = [
+                              { k: "face", l: "顔 (Face)" },
+                              { k: "rightHand", l: "右手 (R-Hand)" },
+                              { k: "leftHand", l: "左手 (L-Hand)" },
+                              { k: "rightFoot", l: "右足 (R-Foot)" },
+                              { k: "leftFoot", l: "左足 (L-Foot)" },
+                            ];
+                          } else if (
+                            detectorType === "MediaPipe" &&
+                            mediaPipeMode === "Hand"
+                          ) {
+                            markers = [
+                              { k: "handRightThumb", l: "右親指" },
+                              { k: "handLeftThumb", l: "左親指" },
+                              { k: "handRightIndex", l: "右人指" },
+                              { k: "handLeftIndex", l: "左人指" },
+                              { k: "handRightMiddle", l: "右中指" },
+                              { k: "handLeftMiddle", l: "左中指" },
+                              { k: "handRightRing", l: "右薬指" },
+                              { k: "handLeftRing", l: "左薬指" },
+                              { k: "handRightPinky", l: "右小指" },
+                              { k: "handLeftPinky", l: "左小指" },
+                            ];
+                          } else if (
+                            detectorType === "MediaPipe" &&
+                            mediaPipeMode === "Face"
+                          ) {
+                            markers = [
+                              { k: "faceRightEye", l: "右目 (瞬き)" },
+                              { k: "faceLeftEye", l: "左目 (瞬き)" },
+                              { k: "faceMouth", l: "口 (開閉)" },
+                            ];
+                          }
+
+                          return markers.map((item) => (
+                            <label
+                              key={item.k}
+                              className="flex items-center space-x-2 bg-slate-800 p-2 rounded-lg cursor-pointer hover:bg-slate-750 transition"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={
+                                  selectedMarkers[item.k as keyof MarkerConfig]
+                                }
+                                onChange={(e) => {
+                                  const newMarkers = {
+                                    ...selectedMarkers,
+                                    [item.k]: e.target.checked,
+                                  };
+                                  setSelectedMarkers(newMarkers);
+                                }}
+                                className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
+                              />
+                              <span className="text-xs text-slate-300">
+                                {item.l}
+                              </span>
+                            </label>
+                          ));
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -1771,19 +2333,21 @@ MediaPipe: 高精度だが負荷が高い。`}
                       <div className="flex bg-slate-800 rounded-lg p-1">
                         <button
                           onClick={() => setDetectorType("MoveNet")}
-                          className={`flex-1 py-1.5 text-xs rounded-md transition ${detectorType === "MoveNet"
-                            ? "bg-slate-600 text-white"
-                            : "text-slate-400"
-                            }`}
+                          className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                            detectorType === "MoveNet"
+                              ? "bg-slate-600 text-white"
+                              : "text-slate-400"
+                          }`}
                         >
                           MoveNet
                         </button>
                         <button
                           onClick={() => setDetectorType("MediaPipe")}
-                          className={`flex-1 py-1.5 text-xs rounded-md transition ${detectorType === "MediaPipe"
-                            ? "bg-slate-600 text-white"
-                            : "text-slate-400"
-                            }`}
+                          className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                            detectorType === "MediaPipe"
+                              ? "bg-slate-600 text-white"
+                              : "text-slate-400"
+                          }`}
                         >
                           MediaPipe
                         </button>
@@ -1811,10 +2375,11 @@ Heavy: 最高精度。`
                               <button
                                 key={t}
                                 onClick={() => setMoveNetModelType(t)}
-                                className={`flex-1 py-1.5 text-xs rounded-md transition ${moveNetModelType === t
-                                  ? "bg-slate-600 text-white"
-                                  : "text-slate-400"
-                                  }`}
+                                className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                                  moveNetModelType === t
+                                    ? "bg-slate-600 text-white"
+                                    : "text-slate-400"
+                                }`}
                               >
                                 {t === "multiPose" ? "Multi" : t}
                               </button>
@@ -1827,10 +2392,11 @@ Heavy: 最高精度。`
                             <button
                               key={t}
                               onClick={() => setBlazePoseModelType(t)}
-                              className={`flex-1 py-1.5 text-xs rounded-md transition ${blazePoseModelType === t
-                                ? "bg-slate-600 text-white"
-                                : "text-slate-400"
-                                }`}
+                              className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                                blazePoseModelType === t
+                                  ? "bg-slate-600 text-white"
+                                  : "text-slate-400"
+                              }`}
                             >
                               {t.charAt(0).toUpperCase() + t.slice(1)}
                             </button>
@@ -1838,6 +2404,30 @@ Heavy: 最高精度。`
                         </div>
                       )}
                     </div>
+                    {/* MediaPipe Mode Selection */}
+                    {detectorType === "MediaPipe" && (
+                      <div className="space-y-2">
+                        <HelpLabel
+                          label="MediaPipe Mode"
+                          description={`Pose: 全身検出。\nHand: 手のハンドサイン。\nFace: 顔の表情。`}
+                        />
+                        <div className="flex bg-slate-800 rounded-lg p-1">
+                          {(["Pose", "Hand", "Face"] as const).map((m) => (
+                            <button
+                              key={m}
+                              onClick={() => setMediaPipeMode(m)}
+                              className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                                mediaPipeMode === m
+                                  ? "bg-slate-600 text-white"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <HelpLabel
                         label="カメラ入力モード"
@@ -1847,25 +2437,26 @@ Heavy: 最高精度。`
                       <div className="flex bg-slate-800 rounded-lg p-1">
                         <button
                           onClick={() => setInputMode("Range")}
-                          className={`flex-1 py-1.5 text-xs rounded-md transition ${inputMode === "Range"
-                            ? "bg-slate-600 text-white"
-                            : "text-slate-400"
-                            }`}
+                          className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                            inputMode === "Range"
+                              ? "bg-slate-600 text-white"
+                              : "text-slate-400"
+                          }`}
                         >
                           指定範囲
                         </button>
                         <button
                           onClick={() => setInputMode("Full")}
-                          className={`flex-1 py-1.5 text-xs rounded-md transition ${inputMode === "Full"
-                            ? "bg-slate-600 text-white"
-                            : "text-slate-400"
-                            }`}
+                          className={`flex-1 py-1.5 text-xs rounded-md transition ${
+                            inputMode === "Full"
+                              ? "bg-slate-600 text-white"
+                              : "text-slate-400"
+                          }`}
                         >
                           全画面
                         </button>
                       </div>
                     </div>
-
 
                     <div className="space-y-2">
                       <HelpLabel
@@ -1884,7 +2475,6 @@ Heavy: 最高精度。`
                         ))}
                       </select>
                     </div>
-
                   </div>
                 )}
 
@@ -1910,20 +2500,34 @@ Heavy: 最高精度。`
                         <input
                           type="checkbox"
                           checked={isRecordingVideo}
-                          onChange={(e) => setIsRecordingVideo(e.target.checked)}
+                          onChange={(e) =>
+                            setIsRecordingVideo(e.target.checked)
+                          }
                           className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
                         />
-                        <span className="text-xs text-slate-300">カメラの映像を同時に記録する</span>
+                        <span className="text-xs text-slate-300">
+                          カメラの映像を同時に記録する
+                        </span>
                       </label>
-                      <label className={`flex items-center space-x-2 cursor-pointer ${!isRecordingVideo ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <label
+                        className={`flex items-center space-x-2 cursor-pointer ${
+                          !isRecordingVideo
+                            ? "opacity-50 pointer-events-none"
+                            : ""
+                        }`}
+                      >
                         <input
                           type="checkbox"
                           checked={includePoseInVideo}
-                          onChange={(e) => setIncludePoseInVideo(e.target.checked)}
+                          onChange={(e) =>
+                            setIncludePoseInVideo(e.target.checked)
+                          }
                           disabled={!isRecordingVideo}
                           className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
                         />
-                        <span className="text-xs text-slate-300">姿勢検出マーカーを含める</span>
+                        <span className="text-xs text-slate-300">
+                          姿勢検出マーカーを含める
+                        </span>
                       </label>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
@@ -1932,16 +2536,19 @@ Heavy: 最高精度。`
                           onChange={(e) => setSkipMemo(e.target.checked)}
                           className="w-4 h-4 rounded text-blue-600 bg-slate-700 border-slate-600 focus:ring-blue-500"
                         />
-                        <span className="text-xs text-slate-300">記録終了時に即時保存する (メモなし)</span>
+                        <span className="text-xs text-slate-300">
+                          記録終了時に即時保存する (メモなし)
+                        </span>
                       </label>
                     </div>
 
                     <button
                       onClick={isRecording ? stopRecording : startRecording}
-                      className={`w-full py-4 rounded-xl flex flex-col items-center justify-center space-y-2 transition-all ${isRecording
-                        ? "bg-red-500/20 border-2 border-red-500 hover:bg-red-500/30"
-                        : "bg-slate-800 border border-slate-700 hover:bg-slate-750 hover:border-blue-500"
-                        }`}
+                      className={`w-full py-4 rounded-xl flex flex-col items-center justify-center space-y-2 transition-all ${
+                        isRecording
+                          ? "bg-red-500/20 border-2 border-red-500 hover:bg-red-500/30"
+                          : "bg-slate-800 border border-slate-700 hover:bg-slate-750 hover:border-blue-500"
+                      }`}
                     >
                       {isRecording ? (
                         <Square className="text-red-500 fill-current" />
@@ -1949,8 +2556,9 @@ Heavy: 最高精度。`
                         <div className="w-4 h-4 rounded-full bg-red-500" />
                       )}
                       <span
-                        className={`text-xs font-bold ${isRecording ? "text-red-400" : "text-slate-300"
-                          }`}
+                        className={`text-xs font-bold ${
+                          isRecording ? "text-red-400" : "text-slate-300"
+                        }`}
                       >
                         {isRecording ? "記録停止" : "記録開始"}
                       </span>
